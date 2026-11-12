@@ -435,6 +435,7 @@ struct Node<'a> {
     close: usize,
     start: usize,
     line: usize,
+    column: usize,
     parent: Option<usize>,
     args: Vec<Arg<'a>>,
     spec: &'static Spec,
@@ -456,7 +457,7 @@ fn inspect(source: &str) -> Result<(Vec<Token<'_>>, Vec<Node<'_>>)> {
         .collect();
     let mut nodes: Vec<Node<'_>> = vec![];
     let mut parents: Vec<usize> = vec![];
-    let (mut last_start, mut line, mut position) = (0, 1, 0);
+    let (mut last_start, mut line, mut line_start, mut position) = (0, 1, 0, 0);
     for (i, token) in tokens.iter().enumerate() {
         let kind = token.text;
         if !CATALOG.widgets.contains_key(kind) && !custom.contains(kind) {
@@ -493,6 +494,9 @@ fn inspect(source: &str) -> Result<(Vec<Token<'_>>, Vec<Node<'_>>)> {
         if offset >= last_start {
             let text = &source[last_start..offset];
             line += text.bytes().filter(|b| *b == b'\n').count();
+            if let Some(last) = text.rfind('\n') {
+                line_start = last_start + last + 1;
+            }
             position += text.encode_utf16().count();
             last_start = offset;
         }
@@ -509,6 +513,7 @@ fn inspect(source: &str) -> Result<(Vec<Token<'_>>, Vec<Node<'_>>)> {
             close,
             start,
             line,
+            column: source[line_start..token.start].encode_utf16().count() + 1,
             parent,
             args: args(&tokens, open),
             spec: CATALOG.widgets.get(kind).unwrap_or(&EMPTY),
@@ -652,7 +657,8 @@ pub fn outline(source: &str) -> Result<Value> {
         let label = properties.iter().find(|item| matches!(item["name"].as_str(), Some("text" | "label")))
             .map(|item| &item["value"]);
         let kind = if node.constructor.is_empty() { node.kind.to_owned() } else { format!("{}.{}", node.kind, node.constructor) };
-        json!({ "id": node.id, "type": kind, "line": node.line, "parent": parent.map(|parent| &parent.id), "label": label,
+        json!({ "id": node.id, "type": kind, "line": node.line, "column": node.column,
+            "parent": parent.map(|parent| &parent.id), "label": label,
             "slots": slots, "slotChoices": choices, "properties": properties, "removable": membership.is_some(),
             "movable": membership.as_ref().is_some_and(|entry| entry.list.is_some()),
             "listSlot": membership.as_ref().and_then(|entry| entry.slot), "wrappable": !typed_app_bar })
@@ -695,6 +701,171 @@ fn append(
             ),
         },
     }
+}
+
+fn constructor(tokens: &[Token<'_>], arg: Arg<'_>, name: &[&str]) -> Option<usize> {
+    let mut start = arg.expression;
+    if matches!(at(tokens, start), "const" | "new") {
+        start += 1;
+    }
+    let open = start + name.len();
+    let matches = name
+        .iter()
+        .enumerate()
+        .all(|(offset, part)| at(tokens, start + offset) == *part);
+    (matches && at(tokens, open) == "(" && tokens[open].close == Some(arg.span.last))
+        .then_some(open)
+}
+
+fn named<'a>(arguments: &[Arg<'a>], name: &str) -> Option<Arg<'a>> {
+    arguments.iter().copied().find(|arg| arg.name == Some(name))
+}
+
+fn set_named(source: &str, tokens: &[Token<'_>], open: usize, name: &str, value: &str) -> String {
+    let arguments = args(tokens, open);
+    if let Some(arg) = named(&arguments, name) {
+        return replace(
+            source,
+            tokens[arg.expression].start,
+            tokens[arg.span.last].end,
+            value,
+        );
+    }
+    append(
+        source,
+        tokens,
+        open,
+        arguments.last().map(|arg| arg.span),
+        &format!("{name}: {value}"),
+    )
+}
+
+fn theme_field(name: &str) -> Field {
+    Field {
+        name: name.into(),
+        kind: if name == "fontFamily" {
+            "string"
+        } else {
+            "color"
+        }
+        .into(),
+        positional: false,
+        prefix: None,
+        options: None,
+        nest: None,
+        min: None,
+        max: None,
+    }
+}
+
+fn theme_value(
+    source: &str,
+    tokens: &[Token<'_>],
+    arguments: &[Arg<'_>],
+    name: &str,
+    editable: bool,
+) -> Value {
+    let expression = named(arguments, name).map(|arg| arg.expression(tokens, source));
+    let value = expression.and_then(|expression| decode_literal(expression, &theme_field(name)));
+    json!({"value":value,"expression":expression.map(|text| text.chars().take(180).collect::<String>()),"editable":editable})
+}
+
+fn can_add_theme(tokens: &[Token<'_>], nodes: &[Node<'_>], node: &Node<'_>) -> bool {
+    let mut current = Some(node);
+    while let Some(widget) = current {
+        if tokens[widget.start].text == "const" {
+            return false;
+        }
+        current = widget.parent.map(|index| &nodes[index]);
+    }
+    true
+}
+
+pub fn themes(source: &str) -> Result<Value> {
+    let (tokens, nodes) = inspect(source)?;
+    Ok(json!(nodes.iter().filter(|node| node.kind == "MaterialApp").map(|node| {
+        let theme = named(&node.args, "theme");
+        let open = theme.and_then(|arg| constructor(&tokens, arg, &["ThemeData"]));
+        let editable = open.is_some() || (theme.is_none() && can_add_theme(&tokens, &nodes, node));
+        let arguments = open.map(|open| args(&tokens, open)).unwrap_or_default();
+        let scheme = named(&arguments, "colorScheme");
+        let scheme_open = scheme.and_then(|arg| constructor(&tokens, arg, &["ColorScheme", ".", "fromSeed"]));
+        let colors = scheme_open.map(|open| args(&tokens, open)).unwrap_or_default();
+        json!({"id":node.id,"line":node.line,"editable":editable,
+            "seedColor":theme_value(source,&tokens,&colors,"seedColor", editable && (scheme.is_none() || scheme_open.is_some())),
+            "scaffoldBackgroundColor":theme_value(source,&tokens,&arguments,"scaffoldBackgroundColor",editable),
+            "fontFamily":theme_value(source,&tokens,&arguments,"fontFamily",editable)})
+    }).collect::<Vec<_>>()))
+}
+
+pub fn edit_theme(source: &str, input: &Value) -> Result<String> {
+    let id = input["id"].as_str().unwrap_or_default();
+    let mut result = source.to_owned();
+    for name in ["seedColor", "scaffoldBackgroundColor", "fontFamily"] {
+        let Some(value) = input[name]
+            .as_str()
+            .filter(|value| !value.trim().is_empty())
+        else {
+            continue;
+        };
+        let value = value.trim();
+        if value.len() > 100 || value.chars().any(char::is_control) {
+            return Err(Problem::new(400, "Choose a valid theme value."));
+        }
+        let (tokens, nodes) = inspect(&result)?;
+        let node = nodes
+            .iter()
+            .find(|node| node.id == id && node.kind == "MaterialApp")
+            .ok_or_else(|| Problem::new(409, "Select a MaterialApp from the current source."))?;
+        let theme = named(&node.args, "theme");
+        let open = theme.and_then(|arg| constructor(&tokens, arg, &["ThemeData"]));
+        let value = encode_literal(&json!(value), &theme_field(name))?;
+        let args_for_new_theme = if name == "seedColor" {
+            format!("colorScheme: ColorScheme.fromSeed(seedColor: {value})")
+        } else {
+            format!("{name}: {value}")
+        };
+        if let Some(open) = open {
+            if name == "seedColor" {
+                let arguments = args(&tokens, open);
+                if let Some(scheme) = named(&arguments, "colorScheme") {
+                    let scheme_open =
+                        constructor(&tokens, scheme, &["ColorScheme", ".", "fromSeed"])
+                            .ok_or_else(|| {
+                                Problem::new(422, "Edit this ColorScheme expression in Dart.")
+                            })?;
+                    result = set_named(&result, &tokens, scheme_open, name, &value);
+                } else {
+                    let brightness = named(&arguments, "brightness")
+                        .map(|arg| format!(", brightness: {}", arg.expression(&tokens, &result)))
+                        .unwrap_or_default();
+                    result = set_named(
+                        &result,
+                        &tokens,
+                        open,
+                        "colorScheme",
+                        &format!("ColorScheme.fromSeed(seedColor: {value}{brightness})"),
+                    );
+                }
+            } else {
+                result = set_named(&result, &tokens, open, name, &value);
+            }
+        } else if theme.is_none() && can_add_theme(&tokens, &nodes, node) {
+            result = set_named(
+                &result,
+                &tokens,
+                node.open,
+                "theme",
+                &format!("ThemeData({args_for_new_theme})"),
+            );
+        } else {
+            return Err(Problem::new(
+                422,
+                "This MaterialApp theme needs a Dart edit.",
+            ));
+        }
+    }
+    Ok(result)
 }
 
 pub fn edit(source: &str, command: &Value) -> Result<String> {

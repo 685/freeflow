@@ -28,12 +28,23 @@ const TARGETS: &[(&str, &str, &str, &str)] = &[
 ];
 
 #[derive(Clone, Default)]
-enum View {
+pub(crate) enum View {
     #[default]
     Closed,
     Projects,
     Create,
     Import,
+    Git {
+        project: String,
+    },
+    GitClone,
+    AgentSettings {
+        project: String,
+    },
+    Theme {
+        project: String,
+        config: Value,
+    },
     Ai {
         config: Value,
         client: String,
@@ -83,19 +94,19 @@ fn dialog() -> HtmlDialogElement {
 fn view() -> (u64, View) {
     MODAL.with_borrow(Clone::clone)
 }
-fn current_view(version: u64) -> bool {
+pub(crate) fn current_view(version: u64) -> bool {
     dialog().open() && MODAL.with_borrow(|view| view.0 == version)
 }
 fn close() {
     dialog().close();
 }
-fn close_current(version: u64) {
+pub(crate) fn close_current(version: u64) {
     if current_view(version) {
         close();
     }
 }
 
-fn open(view: View, title: &str, description: &str, body: String) {
+pub(crate) fn open(view: View, title: &str, description: &str, body: String) {
     MODAL.with_borrow_mut(|state| {
         state.0 += 1;
         state.1 = view;
@@ -218,7 +229,8 @@ pub fn projects() {
         "Projects",
         "",
         format!(
-            r#"<div class="dialog-list">{content}</div><div class="form-footer">{}{}</div>"#,
+            r#"<div class="dialog-list">{content}</div><div class="form-footer">{}{}{}</div>"#,
+            button("clone-project", "Clone repository", "branch", "outline"),
             button("import-folder", "Import folder", "folder", "outline"),
             button("create-project", "New project", "plus", "primary")
         ),
@@ -957,6 +969,16 @@ async fn submit_view(view: View, version: u64, mut input: Value) -> Result {
             import_project(string(&input["folder"]).trim()).await?;
             close_current(version);
         }
+        View::GitClone => crate::source_control::clone_project(version, input).await?,
+        View::AgentSettings { project } if current(&project) => {
+            crate::agent_panel::save_settings(&project, version, input).await?;
+        }
+        View::Theme { project, config } if current(&project) => {
+            crate::theme::save(&project, version, &config, input).await?;
+        }
+        View::Git { project } if current(&project) => {
+            crate::source_control::submit(&project, version, input).await?;
+        }
         View::Backend {
             project, provider, ..
         } => configure_backend(version, project, provider, input).await?,
@@ -1020,6 +1042,13 @@ async fn submit_view(view: View, version: u64, mut input: Value) -> Result {
 async fn act(view: View, version: u64, action: &str, element: &Element) -> Result {
     match view {
         View::Projects if action == "import-folder" => import(),
+        View::Projects if action == "clone-project" => crate::source_control::clone_dialog(),
+        View::Git { project } if current(&project) => {
+            crate::source_control::act(&project, version, action, element).await?;
+        }
+        View::Theme { project, config } if current(&project) => {
+            crate::theme::act(version, &config, action).await?;
+        }
         View::Projects if action == "create-project" => create(),
         View::Projects => {
             if let Some((kind, key)) = action.split_once('-') {

@@ -13,11 +13,26 @@ pub fn render() {
         let open = !state.project.is_null();
         let name = state.project["name"].as_str().unwrap_or("Projects");
         text("active-project", name);
-        for control in ["backends", "export", "run", "analyze", "test"] {
+        for control in [
+            "agent",
+            "app-theme",
+            "backends",
+            "export",
+            "run",
+            "analyze",
+            "test",
+            "dependencies",
+        ] {
             disabled(control, !open);
         }
         hidden("workspace-empty", open);
-        hidden("design-pane", !open || state.mode != Mode::Design);
+        toggle(
+            &id("workspace-surfaces"),
+            "split",
+            state.mode == Mode::Split,
+        );
+        hidden("workspace-surfaces", !open);
+        hidden("design-pane", !open || !state.mode.shows_preview());
         hidden("editing-pane", !open || state.mode == Mode::Design);
         for mode in all("[data-mode]") {
             let active = mode.get_attribute("data-mode").as_deref() == Some(state.mode.name());
@@ -45,6 +60,7 @@ pub fn render() {
         );
         explorer(state);
         inspector(state);
+        crate::agent_panel::layout(state);
         editor(state);
     });
     state::change(|state| preview(state, true));
@@ -266,6 +282,7 @@ fn property(item: &Value) -> String {
 }
 
 pub fn inspector(state: &State) {
+    crate::agent_panel::context(state);
     let Some(node) = state.widget() else {
         html(
             "inspector",
@@ -331,11 +348,10 @@ pub fn widget_options(node: &Value, slot: &str) -> String {
         .collect()
 }
 
-pub fn editor(state: &State) {
+pub fn editor_header(state: &State) {
     let file = state.current_file();
     let source = &state.source;
     let draft = state.drafts.get(&state.draft_key(file));
-    let editing = state.mode != Mode::Design && !state.project.is_null();
     let (name, kind) = if state.mode == Mode::Plan {
         ("App plan", "plan")
     } else if image(file) {
@@ -356,7 +372,7 @@ pub fn editor(state: &State) {
     disabled("save", source.is_null() || draft.is_none());
     hidden(
         "format",
-        state.mode != Mode::Code || !file.ends_with(".dart"),
+        !state.mode.shows_code() || !file.ends_with(".dart"),
     );
     disabled("format", source.is_null());
     disabled("history", !source["revision"].is_string());
@@ -368,8 +384,21 @@ pub fn editor(state: &State) {
             r#"<span>File changed on disk. Your draft is still here.</span><button type="button" id="reload-source" class="button outline small">Use disk version</button>"#,
         );
     }
-    hidden("editor", !editing || source.is_null());
-    hidden("asset-view", !editing || !source.is_null());
+}
+
+pub fn editor(state: &State) {
+    editor_header(state);
+    let file = state.current_file();
+    let source = &state.source;
+    let editing = state.mode != Mode::Design && !state.project.is_null();
+    let planning = state.mode == Mode::Plan && !state.plan_markdown;
+    hidden("editor", !editing || source.is_null() || planning);
+    hidden("asset-view", !editing || !source.is_null() || planning);
+    hidden("plan-layout", state.mode != Mode::Plan);
+    hidden("plan-screen-view", !planning);
+    if planning {
+        crate::planner::render(state);
+    }
     if source.is_null() && !image(file) {
         let label = if state.file_error.is_empty() {
             "Choose a source file."
@@ -378,7 +407,7 @@ pub fn editor(state: &State) {
         };
         html("asset-view", format!("<p>{}</p>", h(label)));
     }
-    let show_tabs = state.mode == Mode::Code && !state.tabs.is_empty();
+    let show_tabs = state.mode.shows_code() && !state.tabs.is_empty();
     hidden("editor-tabs", !show_tabs);
     if show_tabs {
         let tabs: String = state.tabs.iter().map(|tab| format!(r#"<button type="button" class="editor-tab{}" data-file="{}" title="{}">{}{}</button>"#,
@@ -432,6 +461,7 @@ pub fn preview(state: &mut State, force: bool) {
     let starting = matches!(status, "queued" | "running");
     let failed = status == "failed" || job["result"]["compileError"].is_string();
     let reloading = job["result"]["reloading"] == true;
+    let supports_inspector = job["result"]["inspector"] == true;
     let job_id = string(&job["id"]);
     let key = format!(
         "{}:{job_id}:{status}:{url}:{epoch}:{failed}:{reloading}",
@@ -473,10 +503,12 @@ pub fn preview(state: &mut State, force: bool) {
                 .set("freeflow", &format!("{job_id}-{epoch}"));
             let href = next.href();
             if frame.get_attribute("src").as_deref() != Some(&href) {
+                crate::preview_inspector::reset(state, supports_inspector);
                 attr(&frame, "src", &href);
             }
         }
     } else {
+        crate::preview_inspector::reset(state, false);
         let _ = frame.remove_attribute("src");
         let (title, detail, button) = if starting {
             (
@@ -513,6 +545,10 @@ pub fn preview(state: &mut State, force: bool) {
             format!("{graphic}<strong>{title}</strong><p>{detail}</p>{button}"),
         );
     }
+    if !state.mode.shows_preview() {
+        crate::preview_inspector::stop(state);
+    }
+    crate::preview_inspector::controls(state);
     fit(state);
 }
 

@@ -12,6 +12,7 @@ pub const PLAN: &str = "FREEFLOW_PLAN.md";
 pub enum Mode {
     Design,
     Code,
+    Split,
     Plan,
 }
 impl Mode {
@@ -19,15 +20,23 @@ impl Mode {
         match self {
             Self::Design => "design",
             Self::Code => "code",
+            Self::Split => "split",
             Self::Plan => "plan",
         }
     }
     pub fn parse(value: &str) -> Self {
         match value {
             "code" => Self::Code,
+            "split" => Self::Split,
             "plan" => Self::Plan,
             _ => Self::Design,
         }
+    }
+    pub fn shows_preview(self) -> bool {
+        matches!(self, Self::Design | Self::Split)
+    }
+    pub fn shows_code(self) -> bool {
+        matches!(self, Self::Code | Self::Split)
     }
 }
 
@@ -57,6 +66,14 @@ pub struct State {
     pub drafts: HashMap<(String, String), Draft>,
     pub preview: Value,
     pub preview_key: String,
+    pub inspect_ready: bool,
+    pub inspecting: bool,
+    pub pick_request: u64,
+    pub agent_open: bool,
+    pub agent: Value,
+    pub agent_job: Value,
+    pub agent_posting: bool,
+    pub plan_markdown: bool,
     pub device: String,
     pub logs: Vec<Value>,
     pub console_job: String,
@@ -89,6 +106,14 @@ impl Default for State {
             drafts: HashMap::new(),
             preview: Value::Null,
             preview_key: String::new(),
+            inspect_ready: false,
+            inspecting: false,
+            pick_request: 0,
+            agent_open: false,
+            agent: Value::Null,
+            agent_job: Value::Null,
+            agent_posting: false,
+            plan_markdown: false,
             device: "phone".into(),
             logs: vec![],
             console_job: String::new(),

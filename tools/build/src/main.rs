@@ -1,5 +1,9 @@
 use anyhow::{Context, Result, ensure};
-use std::{env, path::Path, process::Command};
+use std::{
+    env,
+    path::{Path, PathBuf},
+    process::Command,
+};
 use wasm_bindgen_cli_support::Bindgen;
 
 fn main() -> Result<()> {
@@ -29,7 +33,9 @@ fn main() -> Result<()> {
         status.success(),
         "Could not build the Freeflow browser interface. Install the wasm32-unknown-unknown Rust target."
     );
-    let assets = target.join("freeflow-web");
+    let assets = env::var_os("FREEFLOW_ASSETS")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| target.join("freeflow-web"));
     Bindgen::new()
         .input_path(target.join("wasm32-unknown-unknown/release/freeflow_web.wasm"))
         .out_name("freeflow_web")

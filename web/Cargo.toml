@@ -22,6 +22,6 @@ web-sys = { version = "0.3.107", features = [
   "FileReader", "FormData", "Headers", "HtmlAnchorElement", "HtmlButtonElement",
   "HtmlDialogElement", "HtmlElement", "HtmlFormElement", "HtmlIFrameElement",
   "HtmlInputElement", "HtmlSelectElement", "HtmlTextAreaElement", "KeyboardEvent",
-  "MouseEvent", "Navigator", "Node", "NodeList", "Request", "RequestInit", "Response",
+  "MessageEvent", "MouseEvent", "Navigator", "Node", "NodeList", "Request", "RequestInit", "Response",
   "ResizeObserver", "Storage", "Url", "UrlSearchParams", "Window",
 ] }

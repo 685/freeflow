@@ -2,6 +2,7 @@ use crate::{
     backends,
     files::{self, Problem, Result},
     flutter::Sdk,
+    inspector,
     jobs::{Job, Jobs},
     processes::Process,
     projects::Project,
@@ -42,13 +43,29 @@ static RESTART_REQUIRED: LazyLock<Regex> =
 pub async fn run(jobs: &Jobs, job: &Job, project: &Project) -> Result<()> {
     let sdk = jobs.flutter.require()?;
     let mut epoch = 0;
+    let mut instrument = jobs.origin.is_some();
     loop {
         job.restart(epoch);
         jobs.pub_command(job, project, &sdk, &["pub", "get"])
             .await?;
-        match debug(jobs, job, project, &sdk, epoch).await {
+        let entry = instrument.then(|| inspector::entry(project)).flatten();
+        let result = debug(
+            jobs,
+            job,
+            project,
+            &sdk,
+            epoch,
+            entry.as_ref().map(|entry| entry.target.as_str()),
+        )
+        .await;
+        match result {
             Ok(DebugEnd::Stopped) => return Ok(()),
             Ok(DebugEnd::Restart(next_epoch)) => epoch = next_epoch,
+            Err(error) if entry.is_some() && !job.is_ready() && !job.cancel.is_cancelled() => {
+                job.log(error.message);
+                job.log("Trying the Flutter preview without widget picking.");
+                instrument = false;
+            }
             Err(error) if !job.is_ready() && !job.cancel.is_cancelled() => {
                 job.log(error.message);
                 job.log("Trying the compiled Flutter preview.");
@@ -107,6 +124,7 @@ async fn debug(
     project: &Project,
     sdk: &Sdk,
     epoch: u64,
+    target: Option<&str>,
 ) -> Result<DebugEnd> {
     let address = std::net::TcpListener::bind((Ipv4Addr::LOCALHOST, 0))?.local_addr()?;
     let port = address.port().to_string();
@@ -126,11 +144,27 @@ async fn debug(
     .map(str::to_owned)
     .to_vec();
     args.extend(backends::options(&jobs.projects.home, project)?);
+    if let Some((target, origin)) = target.zip(jobs.origin.as_deref()) {
+        args.extend([
+            format!("--target={target}"),
+            format!("--dart-define=FREEFLOW_WORKBENCH_ORIGIN={origin}"),
+            "--track-widget-creation".to_owned(),
+        ]);
+    }
     let command = jobs.flutter.command(sdk, args)?;
     job.check()?;
     job.log("Starting a Flutter web preview.");
     let mut process = command.spawn(Some(&project.root), true)?;
-    let result = debug_session(jobs, job, project, &mut process, &url, epoch).await;
+    let result = debug_session(
+        jobs,
+        job,
+        project,
+        &mut process,
+        &url,
+        epoch,
+        target.is_some(),
+    )
+    .await;
     process.stop().await;
     result
 }
@@ -149,6 +183,7 @@ async fn debug_session(
     process: &mut Process,
     url: &str,
     mut epoch: u64,
+    inspector: bool,
 ) -> Result<DebugEnd> {
     let mut last = stamps(&project.root)?;
     let mut watch = watch();
@@ -191,7 +226,7 @@ async fn debug_session(
                                 }
                                 // Flutter serves HTML before the initial Dart build finishes.
                                 if !ready && matches!(message["event"].as_str(), Some("app.webLaunchUrl" | "app.started")) {
-                                    job.ready(url, epoch);
+                                    job.ready(url, epoch, inspector);
                                     job.log("Preview ready.");
                                     ready = true;
                                 }
@@ -211,7 +246,7 @@ async fn debug_session(
                                         job.compile_error(error.into());
                                     } else {
                                         epoch += 1;
-                                        job.ready(url, epoch);
+                                        job.ready(url, epoch, inspector);
                                         job.log("Preview updated.");
                                     }
                                 }
@@ -312,7 +347,7 @@ async fn compiled(
     let mut generation = 0;
     let output = compile(jobs, job, project, sdk, &folder.path().join("web-0")).await?;
     let site = Site::start(output).await?;
-    job.ready(&site.url, epoch);
+    job.ready(&site.url, epoch, false);
     job.log("Preview ready. Flutter recompiles when source files change.");
     let mut watch = watch();
     while !job.cancel.is_cancelled() {
@@ -347,7 +382,7 @@ async fn compiled(
                     let _ = fs::remove_dir_all(old);
                 }
                 epoch += 1;
-                job.ready(&site.url, epoch);
+                job.ready(&site.url, epoch, false);
                 job.log("Preview updated.");
             }
             Err(error) if !job.cancel.is_cancelled() => {

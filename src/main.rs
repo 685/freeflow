@@ -1,7 +1,10 @@
+mod agent;
 mod archive;
 mod backends;
 mod files;
 mod flutter;
+mod git;
+mod inspector;
 mod jobs;
 mod mcp;
 mod preview;

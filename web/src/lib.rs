@@ -1,7 +1,12 @@
+mod agent_panel;
 mod dialogs;
 mod dom;
 mod editor;
+mod planner;
+mod preview_inspector;
+mod source_control;
 mod state;
+mod theme;
 mod view;
 
 use crate::{
@@ -82,6 +87,7 @@ pub async fn activate(project: Value) -> Result {
         view::console_controls(state);
         state.generation
     });
+    agent_panel::reset_inputs();
     view::render();
     refresh_tree(&project_id).await?;
     let path = state::change(|state| {
@@ -236,8 +242,10 @@ pub async fn select(file: String, mode: Mode) -> Result {
         }
         match mode {
             Mode::Design => state.widgets = true,
-            Mode::Code => {
-                state.widgets = false;
+            Mode::Code | Mode::Split => {
+                if mode == Mode::Code {
+                    state.widgets = false;
+                }
                 if !state.tabs.contains(&file) {
                     if state.tabs.len() >= 9 {
                         state.tabs.remove(0);
@@ -258,27 +266,31 @@ pub async fn select(file: String, mode: Mode) -> Result {
 
 fn input_changed(value: String) {
     state::change(|state| {
-        if state.source.is_null() {
-            return;
-        }
-        let key = state.draft_key(state.current_file());
-        if state.source["content"] == value {
-            state.drafts.remove(&key);
-        } else {
-            let revision = state.drafts.get(&key).map_or_else(
-                || state.source["revision"].clone(),
-                |draft| draft.revision.clone(),
-            );
-            state.drafts.insert(
-                key,
-                Draft {
-                    content: value,
-                    revision,
-                },
-            );
-        }
+        set_draft(state, value);
         view::editor(state);
     });
+}
+
+fn set_draft(state: &mut state::State, value: String) {
+    if state.source.is_null() {
+        return;
+    }
+    let key = state.draft_key(state.current_file());
+    if state.source["content"] == value {
+        state.drafts.remove(&key);
+    } else {
+        let revision = state.drafts.get(&key).map_or_else(
+            || state.source["revision"].clone(),
+            |draft| draft.revision.clone(),
+        );
+        state.drafts.insert(
+            key,
+            Draft {
+                content: value,
+                revision,
+            },
+        );
+    }
 }
 
 pub async fn save_draft() -> Result {
@@ -343,7 +355,7 @@ pub async fn visual_edit(command: Value) -> Result {
     .await?;
     if state::read(|state| state.project_id() == project && state.file == path) {
         state::change(|state| {
-            if state.mode == Mode::Code {
+            if state.mode.shows_code() {
                 editor::set(string(&saved["content"]), true, true);
             }
             state.source = saved;
@@ -529,6 +541,7 @@ async fn run_command(action: &str) -> Result {
     let message = match action {
         "format" => format!("Formatted {}", basename(&path)),
         "test" => "Flutter tests passed".into(),
+        "dependencies" => "Flutter dependencies refreshed".into(),
         _ => "Flutter analysis passed".into(),
     };
     toast(&message, false);
@@ -540,6 +553,7 @@ async fn poll(tick: u32) -> Result {
         return Ok(());
     }
     if let Ok(project) = project_id() {
+        agent_panel::poll(&project).await?;
         update_preview(&project).await?;
         if tick.is_multiple_of(4) && current(&project) {
             refresh_tree(&project).await?;
@@ -660,14 +674,14 @@ fn register_events() {
         }
     });
     ui::click("save", || ui::spawn(save_draft()));
-    for command in ["format", "analyze", "test"] {
+    for command in ["format", "analyze", "test", "dependencies"] {
         ui::click(command, move || ui::spawn(run_command(command)));
     }
     ui::listen(&id("editor-tabs"), "click", |event| {
         if let Some(file) =
             closest(&event, "[data-file]").and_then(|element| element.get_attribute("data-file"))
         {
-            ui::spawn(select(file, Mode::Code));
+            ui::spawn(select(file, code_mode()));
         }
     });
     ui::listen(&id("editor-notice"), "click", |event| {
@@ -762,7 +776,14 @@ fn register_events() {
     }
     ui::listen(&id("source-select"), "change", |event| {
         if let Some(element) = target(&event) {
-            ui::spawn(select(ui::value(&element), Mode::Design));
+            let mode = state::read(|state| {
+                if state.mode == Mode::Split {
+                    Mode::Split
+                } else {
+                    Mode::Design
+                }
+            });
+            ui::spawn(select(ui::value(&element), mode));
         }
     });
     ui::listen(&ui::doc(), "keydown", |event| {
@@ -813,7 +834,7 @@ fn tree_events() {
                 view::explorer(state);
             });
         } else if let Some(file) = button.get_attribute("data-file") {
-            ui::spawn(select(file, Mode::Code));
+            ui::spawn(select(file, code_mode()));
         } else if let Some(widget) = button.get_attribute("data-widget") {
             state::change(|state| {
                 state.widget = widget;
@@ -972,7 +993,7 @@ fn inspector_events() {
             Some("code") => {
                 let file = state::read(|state| string(&state.visual["path"]).to_owned());
                 ui::spawn(async move {
-                    select(file, Mode::Code).await?;
+                    select(file, code_mode()).await?;
                     editor::go_to(
                         node["line"].as_u64().unwrap_or_default(),
                         string(&node["id"]).parse().unwrap_or_default(),
@@ -989,12 +1010,27 @@ fn inspector_events() {
     });
 }
 
+fn code_mode() -> Mode {
+    state::read(|state| {
+        if state.mode == Mode::Split {
+            Mode::Split
+        } else {
+            Mode::Code
+        }
+    })
+}
+
 #[wasm_bindgen(start)]
 fn start() -> std::result::Result<(), JsValue> {
     ui::icons();
     editor::initialize();
     dialogs::initialize();
     register_events();
+    preview_inspector::initialize();
+    agent_panel::initialize();
+    planner::initialize();
+    ui::click("app-theme", || ui::spawn(theme::open(None)));
+    ui::click("git", || ui::spawn(source_control::open()));
     let resized = Closure::<dyn FnMut()>::new(|| state::read(view::fit));
     let observer = ResizeObserver::new(resized.as_ref().unchecked_ref())?;
     observer.observe(&id("canvas"));

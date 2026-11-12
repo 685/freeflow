@@ -3,7 +3,7 @@ use std::{
     env,
     ffi::OsString,
     path::{Path, PathBuf},
-    process::{ExitStatus, Stdio},
+    process::{ExitStatus, Output, Stdio},
     time::Duration,
 };
 use tokio::{
@@ -124,6 +124,41 @@ impl ProcessCommand {
             lines,
         })
     }
+
+    pub async fn capture(&self, cwd: &Path, limit: u64) -> Result<Output> {
+        let mut child = self
+            .command()?
+            .current_dir(cwd)
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .kill_on_drop(true)
+            .spawn()?;
+        let out = capture_stream(child.stdout.take().unwrap(), limit + 1);
+        let err = capture_stream(child.stderr.take().unwrap(), 64 * 1024);
+        let (status, stdout, stderr) = tokio::time::timeout(Duration::from_secs(15), async {
+            tokio::try_join!(child.wait(), out, err)
+        })
+        .await
+        .map_err(|_| Problem::new(504, "The command took too long."))??;
+        if stdout.len() as u64 > limit {
+            return Err(Problem::new(
+                413,
+                "This Git result is too large to display.",
+            ));
+        }
+        Ok(Output {
+            status,
+            stdout,
+            stderr,
+        })
+    }
+}
+
+async fn capture_stream(input: impl AsyncRead + Unpin, limit: u64) -> std::io::Result<Vec<u8>> {
+    let mut bytes = Vec::new();
+    input.take(limit).read_to_end(&mut bytes).await?;
+    Ok(bytes)
 }
 
 async fn read_lines(mut input: impl AsyncRead + Unpin, sender: mpsc::Sender<String>) {

@@ -101,6 +101,10 @@ impl Job {
         }
     }
 
+    pub fn report(&self, value: Value) {
+        self.state.lock().unwrap().result = value;
+    }
+
     fn finish(&self, result: Result<Value>) {
         let mut state = self.state.lock().unwrap();
         if self.cancel.is_cancelled() {
@@ -129,10 +133,11 @@ impl Job {
         }
     }
 
-    pub fn ready(&self, url: &str, epoch: u64) {
+    pub fn ready(&self, url: &str, epoch: u64, inspector: bool) {
         let mut state = self.state.lock().unwrap();
         state.status = "ready";
-        state.result = json!({"url":url,"epoch":epoch,"reloading":false,"compileError":null});
+        state.result = json!({"url":url,"epoch":epoch,"inspector":inspector,
+            "reloading":false,"compileError":null});
     }
 
     pub fn refreshing(&self) {
@@ -181,11 +186,12 @@ impl Job {
 }
 
 #[derive(Clone, Copy)]
-enum Mode {
+pub(crate) enum Mode {
     Exclusive,
     PausePreview,
     Preview,
     Sdk,
+    Global,
 }
 
 #[derive(Default)]
@@ -201,19 +207,25 @@ struct Queue {
 pub struct Jobs {
     pub projects: Arc<Projects>,
     pub flutter: Arc<Flutter>,
+    pub origin: Option<String>,
     queue: Mutex<Queue>,
 }
 
 impl Jobs {
-    pub fn new(projects: Arc<Projects>, flutter: Arc<Flutter>) -> Arc<Self> {
+    pub fn new(
+        projects: Arc<Projects>,
+        flutter: Arc<Flutter>,
+        origin: Option<String>,
+    ) -> Arc<Self> {
         Arc::new(Self {
             projects,
             flutter,
+            origin,
             queue: Mutex::new(Queue::default()),
         })
     }
 
-    fn enqueue<F>(
+    pub(crate) fn enqueue<F>(
         self: &Arc<Self>,
         kind: impl Into<String>,
         project: Option<Project>,
@@ -271,6 +283,7 @@ impl Jobs {
                     .insert(job.project_id.clone().unwrap(), job.clone());
             }
             Mode::Sdk => queue.sdk = Some(job.clone()),
+            Mode::Global => {}
             _ => {
                 queue
                     .busy
@@ -382,6 +395,16 @@ impl Jobs {
         self.queue.lock().unwrap().busy.contains_key(id)
     }
 
+    pub fn active_command(&self, project: &str, kind: &str) -> Value {
+        let queue = self.queue.lock().unwrap();
+        queue
+            .busy
+            .get(project)
+            .and_then(|id| queue.jobs.get(id))
+            .filter(|job| job.kind == kind)
+            .map_or(Value::Null, |job| job.view(0))
+    }
+
     pub async fn pub_command(
         &self,
         job: &Job,
@@ -489,6 +512,20 @@ impl Jobs {
                     args.extend(backends::options(&this.projects.home, &project)?);
                 }
                 job.exec(&this.flutter.command(&sdk, args)?, &project.root)
+                    .await?;
+                Ok(json!({}))
+            },
+        )
+    }
+
+    pub fn refresh_dependencies(self: &Arc<Self>, project: Project) -> Result<Value> {
+        self.enqueue(
+            "dependencies",
+            Some(project.clone()),
+            Mode::PausePreview,
+            move |this, job| async move {
+                let sdk = this.flutter.require()?;
+                this.pub_command(&job, &project, &sdk, &["pub", "get"])
                     .await?;
                 Ok(json!({}))
             },

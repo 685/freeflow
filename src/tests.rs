@@ -24,6 +24,107 @@ fn fixture() -> (tempfile::TempDir, projects::Projects, projects::Project) {
 }
 
 #[test]
+fn live_inspector_prefers_the_matching_widget_column_and_project() {
+    let (_home, projects, project) = fixture();
+    let path = "lib/main.dart";
+    let source = "Widget build() => Column(children: [Text('first'), Text('second')]);";
+    fs::write(project.root.join(path), source).unwrap();
+    let outline = visual::outline(source).unwrap();
+    let second = outline["nodes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|node| node["type"] == "Text")
+        .nth(1)
+        .unwrap();
+    let location = json!({"file":"package:example_app/main.dart","line":second["line"],
+        "column":second["column"],"type":"Text"});
+    let hit = inspector::resolve(&projects, &project, &json!({"locations":[
+        {"file":"package:unrelated/main.dart","line":second["line"],"column":second["column"],"type":"Text"},
+        location,
+    ]})).unwrap();
+    assert_eq!(hit["widget"], second["id"]);
+    assert_eq!(hit["path"], path);
+    let outside = inspector::resolve(
+        &projects,
+        &project,
+        &json!({"locations":[
+            {"file":"package:example_app/../.env","line":1,"column":1,"type":"Text"},
+        ]}),
+    )
+    .unwrap();
+    assert!(outside.is_null());
+}
+
+#[test]
+fn project_batch_checks_all_revisions_before_applying_an_agent_edit() {
+    let (_home, projects, project) = fixture();
+    let first = projects.file(&project, "lib/main.dart").unwrap();
+    let edit = |revision| projects::FileEdit {
+        path: first.path.clone(),
+        revision,
+        content: Some("void main() {}\n".into()),
+    };
+    let created = || projects::FileEdit {
+        path: "lib/new.dart".into(),
+        revision: None,
+        content: Some("const value = 1;\n".into()),
+    };
+    let edits = [created(), edit(Some("outdated".into()))];
+    assert_eq!(
+        projects
+            .apply_edits(&project, &edits)
+            .unwrap_err()
+            .status
+            .as_u16(),
+        409
+    );
+    assert!(!project.root.join("lib/new.dart").exists());
+    projects
+        .apply_edits(&project, &[created(), edit(first.revision.clone())])
+        .unwrap();
+    let added = projects.file(&project, "lib/new.dart").unwrap();
+    let updated = projects.file(&project, &first.path).unwrap();
+    projects
+        .apply_edits(
+            &project,
+            &[
+                projects::FileEdit {
+                    path: added.path,
+                    revision: added.revision,
+                    content: None,
+                },
+                projects::FileEdit {
+                    path: first.path.clone(),
+                    revision: updated.revision,
+                    content: Some(first.content.clone()),
+                },
+            ],
+        )
+        .unwrap();
+    assert_eq!(
+        projects.file(&project, &first.path).unwrap().revision,
+        first.revision
+    );
+    assert!(!project.root.join("lib/new.dart").exists());
+}
+
+#[test]
+fn theme_updates_preserve_other_theme_and_color_scheme_arguments() {
+    let source = "Widget build() => MaterialApp(theme: ThemeData(useMaterial3: true, colorScheme: ColorScheme.fromSeed(seedColor: old, brightness: Brightness.dark)));";
+    let apps = visual::themes(source).unwrap();
+    let input = json!({"id":apps[0]["id"],"seedColor":"#35547e",
+        "scaffoldBackgroundColor":"#f3f5f8","fontFamily":"L'été"});
+    let changed = visual::edit_theme(source, &input).unwrap();
+    assert!(changed.contains("useMaterial3: true"));
+    assert!(changed.contains("brightness: Brightness.dark"));
+    let theme = visual::themes(&changed).unwrap();
+    assert_eq!(theme[0]["seedColor"]["value"], "#35547e");
+    assert_eq!(theme[0]["scaffoldBackgroundColor"]["value"], "#f3f5f8");
+    assert_eq!(theme[0]["fontFamily"]["value"], "L'été");
+}
+
+#[test]
 fn visual_edits_preserve_dart_expressions_and_siblings() {
     let before = include_str!("../templates/daymark.dart");
     let outline = visual::outline(before).unwrap();
@@ -319,7 +420,7 @@ async fn preview_waits_for_flutter_compilation_even_if_http_responds() {
     .unwrap();
     let tmp = projects.home.join("tmp/flutter");
     let flutter = Arc::new(flutter::Flutter::new(projects.home.clone()).unwrap());
-    let jobs = jobs::Jobs::new(Arc::new(projects), flutter);
+    let jobs = jobs::Jobs::new(Arc::new(projects), flutter, None);
     jobs.start_preview(project.clone()).unwrap();
     let port = wait_for(|| {
         fs::read_to_string(tmp.join("preview-port"))

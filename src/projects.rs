@@ -5,6 +5,7 @@ use regex::Regex;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::{
+    collections::HashSet,
     fs,
     path::{Path, PathBuf},
     sync::{LazyLock, Mutex},
@@ -41,11 +42,53 @@ pub struct Projects {
     writes: Mutex<()>,
 }
 
+pub struct FileEdit {
+    pub path: String,
+    pub revision: Option<String>,
+    pub content: Option<String>,
+}
+
+struct PreparedEdit<'a> {
+    target: PathBuf,
+    before: Option<Source>,
+    after: Option<&'a str>,
+    mode: u32,
+}
+
+fn file_mode(target: &Path, exists: bool) -> Result<u32> {
+    #[cfg(unix)]
+    if exists {
+        use std::os::unix::fs::PermissionsExt;
+        return Ok(fs::metadata(target)?.permissions().mode() & 0o777);
+    }
+    let _ = (target, exists);
+    Ok(0o644)
+}
+
+fn validate_text(relative: &str, content: &str) -> Result<()> {
+    if content.len() > files::MAX_TEXT || content.contains('\0') {
+        return Err(Problem::new(413, "Enter text up to 2 MiB."));
+    }
+    if !files::is_text(relative.rsplit('/').next().unwrap_or(relative)) {
+        return Err(Problem::new(415, "Choose a supported text file type."));
+    }
+    Ok(())
+}
+
+fn replace(target: &Path, content: Option<&str>, mode: u32) -> Result<()> {
+    if let Some(content) = content {
+        files::atomic_write(target, content, mode)
+    } else {
+        Ok(fs::remove_file(target)?)
+    }
+}
+
 static SDK: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"(?m)^\s*sdk:\s*flutter\s*(?:#.*)?$|flutter:\s*\{\s*sdk:\s*flutter\s*\}").unwrap()
 });
-static NAME: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"(?m)^name:\s*([a-zA-Z0-9_]+)").unwrap());
+static NAME: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r#"(?m)^name:[ \t]*['"]?([a-zA-Z_][a-zA-Z0-9_]*)['"]?[ \t]*(?:#.*)?\r?$"#).unwrap()
+});
 static SLUG: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"[^a-z0-9]+").unwrap());
 static ORG: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"^[a-z][a-z0-9]*(?:\.[a-z][a-z0-9]*)+$").unwrap());
@@ -58,6 +101,12 @@ struct HistoryVersion {
     date: String,
     content: String,
     revision: String,
+}
+
+pub fn package_name(project: &Project) -> Option<String> {
+    let manifest = files::project_file(&project.root, "pubspec.yaml", false).ok()?;
+    let manifest = fs::read_to_string(manifest).ok()?;
+    Some(NAME.captures(manifest.trim_start_matches('\u{feff}'))?[1].to_owned())
 }
 
 impl Projects {
@@ -298,12 +347,7 @@ impl Projects {
             ));
         }
         let content = transform(previous.as_ref())?;
-        if content.len() > files::MAX_TEXT || content.contains('\0') {
-            return Err(Problem::new(413, "Enter text up to 2 MiB."));
-        }
-        if !files::is_text(relative.rsplit('/').next().unwrap_or(relative)) {
-            return Err(Problem::new(415, "Choose a supported text file type."));
-        }
+        validate_text(relative, &content)?;
         if previous
             .as_ref()
             .is_some_and(|source| source.content == content)
@@ -314,33 +358,96 @@ impl Projects {
             .as_ref()
             .map(|source| self.remember(project, relative, source))
             .transpose()?;
-        #[cfg(unix)]
-        let mode = if previous.is_some() {
-            use std::os::unix::fs::PermissionsExt;
-            fs::metadata(&target)?.permissions().mode() & 0o777
-        } else {
-            0o644
-        };
-        #[cfg(not(unix))]
-        let mode = 0o644;
+        let mode = file_mode(&target, previous.is_some())?;
         if let Err(error) = files::atomic_write(&target, &content, mode) {
             if let Some(path) = history {
                 let _ = fs::remove_file(path);
             }
             return Err(error);
         }
-        if let Some(path) = history {
-            if let Ok(entries) = history_entries(path.parent().expect("history folder")) {
-                for old in entries.into_iter().skip(30) {
-                    let _ = fs::remove_file(old);
-                }
-            }
-        }
+        history.into_iter().for_each(prune_history);
         Ok(Source {
             path: relative.into(),
             revision: Some(files::revision(&content)),
             content,
         })
+    }
+
+    pub fn agent_source(&self, project: &Project, relative: &str) -> Result<Option<Source>> {
+        let target = files::project_file(&project.root, relative, true)?;
+        validate_text(relative, "")?;
+        if !files::exists(&target)? {
+            return Ok(None);
+        }
+        let source = files::read_source(&target, relative)?;
+        if fs::read(&target)? != source.content.as_bytes() {
+            return Err(Problem::new(422, "Choose a UTF-8 source file."));
+        }
+        Ok(Some(source))
+    }
+
+    pub fn apply_edits(&self, project: &Project, edits: &[FileEdit]) -> Result<()> {
+        let _guard = self.writes.lock().unwrap();
+        let mut seen = HashSet::new();
+        let mut pending = Vec::with_capacity(edits.len());
+        for edit in edits {
+            let key = if cfg!(windows) {
+                edit.path.to_lowercase()
+            } else {
+                edit.path.clone()
+            };
+            if !seen.insert(key) {
+                return Err(Problem::new(400, "A file appears twice in this change."));
+            }
+            let target = files::project_file(&project.root, &edit.path, true)?;
+            let before = self.agent_source(project, &edit.path)?;
+            if before
+                .as_ref()
+                .and_then(|source| source.revision.as_deref())
+                != edit.revision.as_deref()
+            {
+                return Err(Problem::new(
+                    409,
+                    format!("{} changed on disk. Reload and retry.", edit.path),
+                ));
+            }
+            let after = edit.content.as_deref();
+            if let Some(text) = after {
+                validate_text(&edit.path, text)?;
+            }
+            if before.as_ref().map(|source| source.content.as_str()) != after {
+                let mode = file_mode(&target, before.is_some())?;
+                pending.push(PreparedEdit {
+                    target,
+                    before,
+                    after,
+                    mode,
+                });
+            }
+        }
+        let history = pending
+            .iter()
+            .filter_map(|edit| edit.before.as_ref())
+            .map(|source| self.remember(project, &source.path, source))
+            .collect::<Result<Vec<_>>>()?;
+        for (index, edit) in pending.iter().enumerate() {
+            if let Err(error) = replace(&edit.target, edit.after, edit.mode) {
+                let mut restored = true;
+                for edit in pending[..index].iter().rev() {
+                    let original = edit.before.as_ref().map(|source| source.content.as_str());
+                    restored &= replace(&edit.target, original, edit.mode).is_ok();
+                }
+                if !restored {
+                    return Err(Problem::new(
+                        500,
+                        "Some files could not be restored after a write failure. Check File History.",
+                    ));
+                }
+                return Err(error);
+            }
+        }
+        history.into_iter().for_each(prune_history);
+        Ok(())
     }
 
     fn history_dir(&self, project: &Project, relative: &str) -> PathBuf {
@@ -414,6 +521,14 @@ impl Projects {
         let path = files::project_file(&project.root, &relative, true)?;
         files::atomic_create(&path, &bytes)?;
         Ok(json!({"path": relative}))
+    }
+}
+
+fn prune_history(path: PathBuf) {
+    if let Ok(entries) = history_entries(path.parent().expect("history folder")) {
+        for old in entries.into_iter().skip(30) {
+            let _ = fs::remove_file(old);
+        }
     }
 }
 

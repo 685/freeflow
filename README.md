@@ -1,6 +1,6 @@
 # Freeflow
 
-Freeflow is an MIT-licensed Flutter workbench that runs on your computer. Create or import a Flutter project, edit its Dart code or use the widget tree, and preview the running app in a phone, tablet or desktop viewport. Connect your own AI client over MCP.
+Freeflow is an MIT-licensed Flutter workbench that runs on your computer. Create, import or clone a Flutter project, edit its Dart code or use the widget tree, and preview the running app in a phone, tablet or desktop viewport. Use the built-in Agent with your own model provider or connect an AI client over MCP.
 
 ## Start
 
@@ -17,20 +17,31 @@ Freeflow checks the official stable release feed at startup and periodically whi
 
 ## Build an app
 
-- **Design** shows the real Flutter web app and a widget tree for the selected Dart file. Edit supported properties, add a child, wrap a widget, or move it within a literal children list. Changes are saved to Dart source. Custom expressions, callbacks, and runtime-generated layouts are editable in **Code**.
-- **Code** opens project files with Dart highlighting, tabs, formatting and per-file save history. Use **Ctrl/Cmd + S** to save and **Ctrl/Cmd + P** to open files by name. Add image assets in **Files** and declare them in the project's pubspec.
-- **Plan** edits the project's portable **FREEFLOW_PLAN.md**. Use it to record screen, data and navigation requirements for your AI client.
-- **Run** starts a Flutter preview. Source edits trigger a refresh. If the Flutter debug server cannot start, Freeflow compiles and serves the web app on a local port. The console shows package, compiler and build output. Use **Analyze** and **Test** to run Flutter's checks.
+- **Design** shows the real Flutter web app and the widget tree. Use the cursor button to select a widget directly in a compatible Flutter debug preview. Edit supported properties, add a child, wrap a widget, or move it within a literal children list. Changes are saved to Dart source.
+- **Code** opens project files with Dart highlighting, tabs, formatting and per-file save history. **Split** keeps the live preview and code editor visible together. Use **Ctrl/Cmd + S** to save and **Ctrl/Cmd + P** to open files by name. Add image assets in **Files** and declare them in the project's pubspec.
+- **Plan** records your goal, screens and navigation in the project's **FREEFLOW_PLAN.md**. Switch between the screen planner and Markdown. **Plan with Agent** and **Build from plan** prepare prompts for review in the Agent panel.
+- **App theme** edits the seed color, scaffold background and font family in a supported Material theme. Use the code editor or Agent for custom theme expressions.
+- **Run** starts a Flutter preview. Source edits trigger a refresh. If the Flutter debug server cannot start, Freeflow compiles and serves the web app on a local port. The console shows package, compiler and build output. Use **Refresh Flutter dependencies**, **Analyze** and **Test** from the bottom toolbar.
 
 The device controls resize the web viewport. Use the Android or iOS tools to test native permissions, plugins and platform behavior.
 
 ## Connect your AI
 
+Open **Agent → Agent settings** and enter your OpenAI-compatible Chat Completions base URL and model name. For a local Ollama server the default base URL is **http://127.0.0.1:11434/v1**. Use a model that supports tool calls for project access and vision for attached images. Enter an API key when your provider requires one. Freeflow stores it in your local data folder.
+
+The Agent streams replies and receives the active file and selected widget as context. **Ask** reads project files. **Edit files** can apply Dart and configuration edits. Use **Restore checkpoint** to undo a set of Agent edits while their file revisions still match.
+
 Open a project and select **AI Connect**. It generates project-scoped setup commands for **Codex**, **Claude Code** and **Claude Desktop**. Your client can edit project files, work with the visual widget tree, and run previews, analysis and builds. The MCP server uses standard STDIO for other local MCP clients as well.
 
 Use **cargo run --locked -p freeflow-build -- --no-open** to run Freeflow without opening a browser. The **AI Connect** dialog generates commands for the native **freeflow mcp** executable. Start Freeflow first and pass the same **--home** to both processes if you use a custom data folder. Existing MCP clients need the updated command from **AI Connect**. Use Codex for ChatGPT-based local development. The [ChatGPT web app's MCP integration](https://help.openai.com/en/articles/12584461) connects to remote servers.
 
-Freeflow has no subscription or AI API requirement of its own. Your AI client and backend providers retain their own usage limits.
+Freeflow has no subscription of its own. Your AI client and backend providers retain their own usage limits.
+
+## Source control
+
+Use **Source control** to initialize Git, connect a remote, inspect and stage changes, commit, switch branches, fetch, pull and push. Use **Clone repository** to open a Flutter repository over HTTPS or SSH. Git uses the credentials and commit identity configured on your computer.
+
+If a pull finds a conflict, open its diff to compare the two versions. Accept either version or edit the file in the code editor and mark it resolved. Commit the merge when all conflicts are resolved.
 
 ## Connect a backend
 
@@ -59,8 +70,6 @@ For the default Kotlin Gradle template, **Export → Google Play → Configure s
 
 Run **cargo test --locked** to check the workbench and **cargo run --locked -p freeflow -- --help** for launch options. Use **cargo run --locked -p freeflow-build -- --build-only** to compile the browser assets into **target/freeflow-web**. Freeflow listens on loopback and serves Flutter previews from a separate local origin. Project metadata, file history, the managed SDK and generated builds live under **~/.freeflow** by default. Use **--home** for another location, **--port** to change the workbench port, and **--no-open** for a headless session. Import Flutter projects you trust to run on this computer.
 
-To publish from an authenticated GitHub CLI, initialize and commit the source, then run **gh repo create freeflow --public --source . --remote origin --push** from the Freeflow folder.
-
 ## Current scope
 
-Freeflow 0.1 covers local Flutter development, visual edits for supported Dart constructors, AI client connections, backend setup and local export builds. Hosted collaboration, managed web hosting, automated store submissions and a visual editor for arbitrary dynamic Dart UI are outside this release.
+Freeflow 0.1 covers local Flutter development, visual edits for supported Dart constructors, project AI, Git source control, backend setup and local export builds. Hosted collaboration, managed web hosting, automated store submissions and a visual editor for arbitrary dynamic Dart UI are outside this release.

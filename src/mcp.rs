@@ -23,6 +23,10 @@ fn known(name: &str) -> bool {
         .any(|tool| tool["name"] == name)
 }
 
+pub fn definitions() -> &'static [Value] {
+    TOOLS.as_array().expect("tool definitions")
+}
+
 pub fn required<'a>(input: &'a Value, field: &str) -> Result<&'a str> {
     input[field]
         .as_str()

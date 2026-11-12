@@ -1,7 +1,8 @@
 use crate::{
-    backends,
+    agent, backends,
     files::{self, Problem, Result, Session},
     flutter::Flutter,
+    git, inspector,
     jobs::Jobs,
     mcp::{self, required, revision},
     projects::{self, Project, Projects},
@@ -9,7 +10,7 @@ use crate::{
 };
 use axum::{
     Json, Router,
-    body::{Body, to_bytes},
+    body::{Body, Bytes, to_bytes},
     extract::{Request, State},
     http::{HeaderMap, HeaderValue, Method, StatusCode, header},
     middleware::{self, Next},
@@ -44,7 +45,8 @@ struct Workbench {
     host: String,
     origin: String,
     token: String,
-    assets: PathBuf,
+    browser_js: Bytes,
+    browser_wasm: Bytes,
     bin: PathBuf,
     jobs: Arc<Jobs>,
     downloads: Mutex<HashMap<String, Download>>,
@@ -58,24 +60,28 @@ pub async fn serve(
     no_open: bool,
     shutdown: impl Future<Output = ()> + Send + 'static,
 ) -> anyhow::Result<()> {
-    for file in ["freeflow_web.js", "freeflow_web_bg.wasm"] {
-        anyhow::ensure!(
-            assets.join(file).is_file(),
-            "Build the Freeflow browser interface with cargo run -p freeflow-build."
-        );
-    }
+    let browser_asset = |name| {
+        std::fs::read(assets.join(name)).map(Bytes::from).map_err(|error| {
+            anyhow::anyhow!(
+                "Could not load {name}: {error}. Build the Freeflow browser interface with cargo run -p freeflow-build."
+            )
+        })
+    };
+    let browser_js = browser_asset("freeflow_web.js")?;
+    let browser_wasm = browser_asset("freeflow_web_bg.wasm")?;
     std::fs::create_dir_all(&home)?;
     let host = listener.local_addr()?.to_string();
     let origin = format!("http://{host}");
     let token = files::random_token(32)?;
     let projects = Arc::new(Projects::new(home.clone()));
     let flutter = Arc::new(Flutter::new(home.clone())?);
-    let jobs = Jobs::new(projects, flutter);
+    let jobs = Jobs::new(projects, flutter, Some(origin.clone()));
     let state = Arc::new(Workbench {
         host,
         origin: origin.clone(),
         token: token.clone(),
-        assets,
+        browser_js,
+        browser_wasm,
         bin,
         jobs: jobs.clone(),
         downloads: Mutex::new(HashMap::new()),
@@ -303,8 +309,14 @@ async fn dispatch(State(state): State<Arc<Workbench>>, request: Request) -> Resu
             }
             "/styles.css" => return Ok(text(STYLE, "text/css; charset=utf-8")),
             "/app.mjs" => return Ok(text(LOADER, "text/javascript; charset=utf-8")),
-            "/freeflow_web.js" | "/freeflow_web_bg.wasm" => {
-                return stream(&state.assets.join(&path[1..]), None).await;
+            "/freeflow_web.js" => {
+                return Ok(text(
+                    state.browser_js.clone(),
+                    "text/javascript; charset=utf-8",
+                ));
+            }
+            "/freeflow_web_bg.wasm" => {
+                return Ok(text(state.browser_wasm.clone(), "application/wasm"));
             }
             _ => {}
         }
@@ -368,6 +380,13 @@ async fn dispatch(State(state): State<Arc<Workbench>>, request: Request) -> Resu
                 projects.import_folder(required(&input, "folder")?)?,
             ));
         }
+        ("POST", "/api/projects/clone") => {
+            let input = body(request).await?;
+            return Ok(response(
+                202,
+                git::clone_project(jobs, required(&input, "url")?)?,
+            ));
+        }
         ("POST", "/api/mcp") => {
             let input = body(request).await?;
             return Ok(response(
@@ -388,6 +407,12 @@ async fn dispatch(State(state): State<Arc<Workbench>>, request: Request) -> Resu
                     &state,
                     (!id.is_empty()).then(|| projects.get(&id)).transpose()?,
                 ),
+            ));
+        }
+        ("POST", "/api/agent-config") => {
+            return Ok(response(
+                200,
+                agent::save_provider(&projects.home, &body(request).await?)?,
             ));
         }
         ("POST", "/api/settings") => {
@@ -459,6 +484,16 @@ async fn project_route(
             "file" => json!(projects.file(&project, &file)?),
             "plan" => json!(projects.plan(&project)?),
             "widgets" => read_widgets(projects, &project, &file)?,
+            "theme" => {
+                if !file.ends_with(".dart") {
+                    return Err(Problem::new(400, "Select a Dart file."));
+                }
+                let source = projects.file(&project, &file)?;
+                json!({"path":source.path,"revision":source.revision,"apps":visual::themes(&source.content)?})
+            }
+            "git" => git::state(&project).await?,
+            "git-diff" => git::diff(projects, &project, &file).await?,
+            "agent" => agent::state(jobs, &project)?,
             "history" => json!(projects.history(&project, &file)?),
             "history-version" => projects.history_version(&project, &file, &query(url, "id"))?,
             "preview" => jobs.preview(&project.id),
@@ -496,6 +531,20 @@ async fn project_route(
         let input = body(request).await?;
         let (code, value) = match part {
             "widgets" => (200, write_widgets(projects, &project, &input)?),
+            "theme" => {
+                let path = required(&input, "path")?;
+                if !path.ends_with(".dart") {
+                    return Err(Problem::new(400, "Select a Dart file."));
+                }
+                let source = projects.update(&project, path, revision(&input)?, |source| {
+                    let source = source.ok_or_else(|| Problem::new(404, "Dart file not found."))?;
+                    visual::edit_theme(&source.content, &input)
+                })?;
+                (200, json!(source))
+            }
+            "inspect" => (200, inspector::resolve(projects, &project, &input)?),
+            "git" => (202, git::operation(jobs, project, &input)?),
+            "agent" => (202, agent::operation(jobs, project, &input)?),
             "preview" => match input["action"].as_str() {
                 Some("start") => (202, jobs.start_preview(project)?),
                 Some("reload") => (202, jobs.reload_preview(project)?),
@@ -504,6 +553,7 @@ async fn project_route(
             },
             "command" => match input["action"].as_str() {
                 Some(action @ ("analyze" | "test")) => (202, jobs.analyze(project, action)?),
+                Some("dependencies") => (202, jobs.refresh_dependencies(project)?),
                 Some("format") => (
                     202,
                     jobs.format(project, required(&input, "path")?, revision(&input)?)?,
