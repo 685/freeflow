@@ -191,9 +191,8 @@ class Preview {
     job.signal.throwIfAborted();
     this.#handle = await work.flutter.start(args, { cwd: project.root, sdk, onLine: line => this.#receive(line) });
     const running = job.using(this.#handle);
-    // The web-server device can be serving HTML before the browser attaches.
-    // Probe the local port as well as consuming the Flutter daemon events.
-    const ready = this.#waitForServer(url);
+    // Flutter serves HTML before it finishes compiling the app.
+    const ready = this.#waitForServer();
     try {
       const first = await Promise.race([
         ready.then(() => 'ready'),
@@ -304,17 +303,12 @@ class Preview {
     }
   }
 
-  async #waitForServer(url) {
+  async #waitForServer() {
     const deadline = Date.now() + 90000;
     const signal = this.signal;
     while (Date.now() < deadline) {
       signal.throwIfAborted();
       if (this.#announced) return;
-      const response = await fetch(url, { signal: AbortSignal.any([signal, AbortSignal.timeout(850)]), redirect: 'error' }).catch(() => null);
-      if (response?.ok) {
-        await response.body?.cancel();
-        return;
-      }
       await delay(450, undefined, { signal });
     }
     throw new Error('Flutter did not start a preview within 90 seconds. See the console.');

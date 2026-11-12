@@ -1,12 +1,15 @@
 import assert from 'node:assert/strict';
 import { EventEmitter, once } from 'node:events';
 import * as fs from 'node:fs/promises';
+import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { PassThrough, Readable } from 'node:stream';
 import { test } from 'node:test';
+import { setTimeout as delay } from 'node:timers/promises';
 import { zipFolder } from '../src/archive.mjs';
 import { generateBackends, validateBackend } from '../src/backends.mjs';
+import { Jobs } from '../src/jobs.mjs';
 import { serveMcp } from '../src/mcp.mjs';
 import { capture } from '../src/processes.mjs';
 import { Projects } from '../src/projects.mjs';
@@ -134,6 +137,47 @@ test('workbench routes enforce a local token and MCP project scope', async t => 
     assert.equal(wrong.status, 403);
   } finally {
     await workbench.close();
+  }
+});
+
+test('preview waits for Flutter to finish compiling before opening', { timeout: 8000 }, async t => {
+  const { home, root } = await fixture(t);
+  const projects = new Projects(home);
+  const project = await projects.importFolder(root);
+  const server = createServer((req, res) => res.end('<!doctype html>'));
+  const listening = once(server, 'listening', { signal: t.signal });
+  let announce;
+  const flutter = {
+    selected: async () => ({}),
+    settings: async () => ({}),
+    command: async () => ({ file: process.execPath, args: ['-e', ''] }),
+    async start(args, { onLine }) {
+      const port = Number(args[args.indexOf('--web-port') + 1]);
+      const url = 'http://127.0.0.1:' + port + '/';
+      announce = () => onLine(JSON.stringify([{ event: 'app.webLaunchUrl', params: { url } }]));
+      const done = once(server, 'close').then(() => ({ code: 0 }));
+      server.listen(port, '127.0.0.1');
+      await listening;
+      return { done, stop: () => { if (server.listening) server.close(); } };
+    },
+  };
+  const jobs = new Jobs(home, projects, flutter, { options: async () => [] });
+  try {
+    jobs.startPreview(project);
+    await listening;
+    const url = 'http://127.0.0.1:' + server.address().port + '/';
+    const response = await fetch(url, { signal: t.signal });
+    assert.equal(await response.text(), '<!doctype html>');
+    await delay(600, undefined, { signal: t.signal });
+    assert.equal(jobs.preview(project).status, 'running');
+    assert.equal(jobs.preview(project).result.url, null);
+
+    announce();
+    while (jobs.preview(project).status === 'running') await delay(40, undefined, { signal: t.signal });
+    assert.equal(jobs.preview(project).status, 'ready');
+    assert.equal(jobs.preview(project).result.url, url);
+  } finally {
+    await jobs.close();
   }
 });
 
