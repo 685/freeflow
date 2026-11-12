@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="freeflow-token" content="FREEFLOW_SESSION_TOKEN">
+  <meta name="theme-color" content="#17181d">
+  <title>Freeflow — Flutter Workbench</title>
+  <link rel="stylesheet" href="/styles.css">
+  <script type="module" src="/app.mjs"></script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="top-left">
+      <button type="button" id="mobile-explorer" class="icon-button compact-only" aria-label="Toggle explorer"><span data-icon="menu"></span></button>
+      <div class="brand"><span class="brand-mark" data-icon="brand"></span><span>Freeflow</span></div>
+      <div class="top-divider"></div>
+      <button class="button project-switch" id="project-switch" type="button">
+        <span class="ellipsis" id="active-project">Projects</span><span data-icon="chevrons"></span>
+      </button>
+    </div>
+    <nav class="mode-switch" aria-label="Workspace">
+      <button type="button" class="mode active" data-mode="design"><span data-icon="design"></span>Design</button>
+      <button type="button" class="mode" data-mode="code"><span data-icon="code"></span>Code</button>
+      <button type="button" class="mode" data-mode="plan"><span data-icon="plan"></span>Plan</button>
+    </nav>
+    <div class="top-right">
+      <button type="button" id="ai" class="button soft" title="Connect an AI client"><span data-icon="spark"></span><span class="toolbar-label">AI Connect</span></button>
+      <button type="button" id="backends" class="button soft" title="Backends" disabled><span data-icon="database"></span><span class="toolbar-label">Backends</span></button>
+      <button type="button" id="export" class="button outline" title="Export" disabled><span data-icon="export"></span><span class="toolbar-label">Export</span></button>
+      <button type="button" id="run" class="button primary run" disabled><span data-icon="play"></span><span>Run</span></button>
+    </div>
+  </header>
+
+  <main class="workbench">
+    <aside class="left-pane" aria-label="Project explorer">
+      <div class="explorer-header">
+        <div class="pane-title">Explorer</div>
+        <button type="button" id="new-project" class="icon-button" aria-label="New project" title="New project"><span data-icon="plus"></span></button>
+      </div>
+      <div class="explorer-tabs" role="group" aria-label="Explorer view">
+        <button type="button" id="widgets-tab" class="explorer-tab active" data-explorer="widgets"><span data-icon="layers"></span>Widgets</button>
+        <button type="button" id="files-tab" class="explorer-tab" data-explorer="files"><span data-icon="folder"></span>Files</button>
+      </div>
+      <div class="explorer-content">
+        <div class="source-select" id="source-select-wrap" hidden>
+          <span data-icon="file-code"></span>
+          <select id="source-select" aria-label="Dart source file"></select>
+        </div>
+        <div id="file-actions" class="file-actions" hidden>
+          <button id="new-file" class="button soft small" type="button"><span data-icon="plus"></span>File</button>
+          <button id="add-asset" class="button soft small" type="button"><span data-icon="image"></span>Asset</button>
+          <input id="asset-input" type="file" accept="image/png,image/jpeg,image/webp,image/gif,image/avif,image/x-icon" hidden>
+        </div>
+        <div id="explorer-tree" class="tree"></div>
+      </div>
+      <div class="sidebar-footer">
+        <span class="sdk-status" id="sdk-status"><span data-icon="flutter"></span>Flutter</span>
+        <button id="settings" class="icon-button" type="button" aria-label="Settings" title="Settings"><span data-icon="settings"></span></button>
+      </div>
+    </aside>
+
+    <section class="center-pane" aria-label="App workspace">
+      <div class="workspace-empty" id="workspace-empty">
+        <div class="empty-emblem"><span data-icon="brand"></span></div>
+        <h1>Build a Flutter app</h1>
+        <p>Start from a template or bring in a Flutter project from your computer.</p>
+        <div class="empty-actions">
+          <button type="button" id="try-sample" class="button primary"><span data-icon="play"></span>Try the sample</button>
+          <button type="button" id="import-project" class="button outline"><span data-icon="folder"></span>Import project</button>
+        </div>
+      </div>
+
+      <section class="preview-pane" id="design-pane" hidden>
+        <div class="section-toolbar preview-toolbar">
+          <div class="section-name"><span data-icon="preview"></span>Preview</div>
+          <div class="device-switch" role="group" aria-label="Preview viewport">
+            <button type="button" class="device active" data-device="phone" title="Phone" aria-label="Phone"><span data-icon="phone"></span><span class="device-label">Phone</span></button>
+            <button type="button" class="device" data-device="tablet" title="Tablet" aria-label="Tablet"><span data-icon="tablet"></span><span class="device-label">Tablet</span></button>
+            <button type="button" class="device" data-device="desktop" title="Desktop" aria-label="Desktop"><span data-icon="desktop"></span><span class="device-label">Desktop</span></button>
+          </div>
+          <div class="inline-actions">
+            <button type="button" id="mobile-inspector" class="icon-button compact-inspector" aria-label="Toggle properties" title="Properties"><span data-icon="sliders"></span></button>
+            <button type="button" id="reload" class="icon-button" aria-label="Refresh preview" title="Refresh preview" disabled><span data-icon="reload"></span></button>
+            <button type="button" id="open-preview" class="icon-button" aria-label="Open preview in browser tab" title="Open in browser tab" disabled><span data-icon="external"></span></button>
+          </div>
+        </div>
+        <div class="canvas" id="canvas">
+          <div class="canvas-content" id="canvas-content">
+            <div class="device-frame phone" id="device-frame">
+              <iframe id="preview-frame" title="Live Flutter app preview" sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-downloads" referrerpolicy="no-referrer" hidden></iframe>
+              <div class="preview-empty" id="preview-empty"></div>
+            </div>
+          </div>
+          <div id="canvas-info" class="canvas-info"></div>
+        </div>
+      </section>
+
+      <section class="editing-pane" id="editing-pane" hidden>
+        <div class="section-toolbar editor-toolbar">
+          <div class="section-name" id="editor-name"></div>
+          <div class="inline-actions">
+            <button id="history" type="button" class="icon-button" title="File history" aria-label="File history"><span data-icon="history"></span></button>
+            <button id="format" type="button" class="button soft small"><span data-icon="format"></span>Format</button>
+            <button id="save" type="button" class="button primary small" disabled><span data-icon="save"></span>Save</button>
+          </div>
+        </div>
+        <div id="editor-tabs" class="editor-tabs" hidden></div>
+        <div id="editor-notice" class="editor-notice" hidden></div>
+        <div class="editor-wrap" id="editor"></div>
+        <div class="asset-view" id="asset-view" hidden></div>
+      </section>
+
+      <section class="console" id="console" hidden aria-label="Console output">
+        <div class="console-toolbar">
+          <div class="section-name"><span data-icon="terminal"></span>Console</div>
+          <select id="console-job" aria-label="Command output"></select>
+          <button type="button" id="cancel-job" class="button soft small" hidden>Cancel</button>
+          <button type="button" id="console-close" class="icon-button" aria-label="Close console"><span data-icon="x"></span></button>
+        </div>
+        <pre id="console-output" class="console-output" tabindex="0"></pre>
+      </section>
+      <footer class="statusbar">
+        <button type="button" id="console-toggle" class="button plain small" aria-expanded="false"><span data-icon="terminal"></span>Console<span id="console-indicator" class="notice-dot" hidden></span></button>
+        <div class="status-right">
+          <button type="button" id="analyze" class="button plain small" disabled><span data-icon="check-circle"></span>Analyze</button>
+          <button type="button" id="test" class="button plain small" disabled><span data-icon="test"></span>Test</button>
+          <span class="status-divider"></span>
+          <span class="preview-status" id="preview-status"><span class="status-dot"></span>Idle</span>
+        </div>
+      </footer>
+    </section>
+
+    <aside class="right-pane" aria-label="Widget properties">
+      <div class="inspector-header"><span data-icon="sliders"></span><div class="pane-title">Properties</div></div>
+      <div id="inspector" class="inspector"></div>
+    </aside>
+  </main>
+  <dialog id="modal" class="modal">
+    <div class="modal-header">
+      <div><h2 id="modal-title"></h2><p id="modal-subtitle" hidden></p></div>
+      <button type="button" id="modal-close" class="icon-button" aria-label="Close dialog"><span data-icon="x"></span></button>
+    </div>
+    <div id="modal-body" class="modal-body"></div>
+  </dialog>
+  <div class="toast-region" id="toasts" role="status" aria-live="polite"></div>
+</body>
+</html>
