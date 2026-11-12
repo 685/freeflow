@@ -1,0 +1,871 @@
+{
+  "widgets": {
+    "MaterialApp": {
+      "slots": [
+        [
+          "home",
+          false
+        ]
+      ],
+      "fields": [
+        {
+          "name": "title",
+          "type": "string"
+        },
+        {
+          "name": "debugShowCheckedModeBanner",
+          "type": "boolean"
+        }
+      ]
+    },
+    "Scaffold": {
+      "slots": [
+        [
+          "appBar",
+          false
+        ],
+        [
+          "body",
+          false
+        ],
+        [
+          "floatingActionButton",
+          false
+        ],
+        [
+          "bottomNavigationBar",
+          false
+        ]
+      ],
+      "fields": [
+        {
+          "name": "backgroundColor",
+          "type": "color"
+        }
+      ]
+    },
+    "AppBar": {
+      "slots": [
+        [
+          "title",
+          false
+        ],
+        [
+          "leading",
+          false
+        ],
+        [
+          "actions",
+          true
+        ]
+      ],
+      "fields": [
+        {
+          "name": "backgroundColor",
+          "type": "color"
+        },
+        {
+          "name": "foregroundColor",
+          "type": "color"
+        },
+        {
+          "name": "centerTitle",
+          "type": "boolean"
+        }
+      ]
+    },
+    "Text": {
+      "slots": [],
+      "fields": [
+        {
+          "name": "text",
+          "type": "string",
+          "positional": true
+        },
+        {
+          "name": "textAlign",
+          "type": "select",
+          "prefix": "TextAlign",
+          "options": [
+            "left",
+            "right",
+            "center",
+            "justify",
+            "start",
+            "end"
+          ]
+        },
+        {
+          "name": "fontSize",
+          "type": "number",
+          "nest": [
+            "style",
+            "TextStyle"
+          ]
+        },
+        {
+          "name": "color",
+          "type": "color",
+          "nest": [
+            "style",
+            "TextStyle"
+          ]
+        },
+        {
+          "name": "fontWeight",
+          "type": "select",
+          "prefix": "FontWeight",
+          "options": [
+            "w100",
+            "w200",
+            "w300",
+            "w400",
+            "w500",
+            "w600",
+            "w700",
+            "w800",
+            "w900"
+          ],
+          "nest": [
+            "style",
+            "TextStyle"
+          ]
+        }
+      ]
+    },
+    "Icon": {
+      "slots": [],
+      "fields": [
+        {
+          "name": "size",
+          "type": "number"
+        },
+        {
+          "name": "color",
+          "type": "color"
+        }
+      ]
+    },
+    "Row": {
+      "slots": [
+        [
+          "children",
+          true
+        ]
+      ],
+      "fields": [
+        {
+          "name": "mainAxisAlignment",
+          "type": "select",
+          "prefix": "MainAxisAlignment",
+          "options": [
+            "start",
+            "end",
+            "center",
+            "spaceBetween",
+            "spaceAround",
+            "spaceEvenly"
+          ]
+        },
+        {
+          "name": "crossAxisAlignment",
+          "type": "select",
+          "prefix": "CrossAxisAlignment",
+          "options": [
+            "start",
+            "end",
+            "center",
+            "stretch",
+            "baseline"
+          ]
+        },
+        {
+          "name": "mainAxisSize",
+          "type": "select",
+          "prefix": "MainAxisSize",
+          "options": [
+            "min",
+            "max"
+          ]
+        },
+        {
+          "name": "spacing",
+          "type": "number"
+        }
+      ]
+    },
+    "Column": {
+      "slots": [
+        [
+          "children",
+          true
+        ]
+      ],
+      "fields": [
+        {
+          "name": "mainAxisAlignment",
+          "type": "select",
+          "prefix": "MainAxisAlignment",
+          "options": [
+            "start",
+            "end",
+            "center",
+            "spaceBetween",
+            "spaceAround",
+            "spaceEvenly"
+          ]
+        },
+        {
+          "name": "crossAxisAlignment",
+          "type": "select",
+          "prefix": "CrossAxisAlignment",
+          "options": [
+            "start",
+            "end",
+            "center",
+            "stretch",
+            "baseline"
+          ]
+        },
+        {
+          "name": "mainAxisSize",
+          "type": "select",
+          "prefix": "MainAxisSize",
+          "options": [
+            "min",
+            "max"
+          ]
+        },
+        {
+          "name": "spacing",
+          "type": "number"
+        }
+      ]
+    },
+    "Wrap": {
+      "slots": [
+        [
+          "children",
+          true
+        ]
+      ],
+      "fields": [
+        {
+          "name": "spacing",
+          "type": "number"
+        },
+        {
+          "name": "runSpacing",
+          "type": "number"
+        }
+      ]
+    },
+    "Stack": {
+      "slots": [
+        [
+          "children",
+          true
+        ]
+      ],
+      "fields": []
+    },
+    "ListView": {
+      "slots": [
+        [
+          "children",
+          true
+        ]
+      ],
+      "fields": [
+        {
+          "name": "padding",
+          "type": "spacing"
+        },
+        {
+          "name": "shrinkWrap",
+          "type": "boolean"
+        },
+        {
+          "name": "reverse",
+          "type": "boolean"
+        }
+      ]
+    },
+    "GridView": {
+      "slots": [
+        [
+          "children",
+          true
+        ]
+      ],
+      "fields": [
+        {
+          "name": "padding",
+          "type": "spacing"
+        }
+      ]
+    },
+    "SafeArea": {
+      "slots": [
+        [
+          "child",
+          false
+        ]
+      ],
+      "fields": [
+        {
+          "name": "left",
+          "type": "boolean"
+        },
+        {
+          "name": "top",
+          "type": "boolean"
+        },
+        {
+          "name": "right",
+          "type": "boolean"
+        },
+        {
+          "name": "bottom",
+          "type": "boolean"
+        }
+      ]
+    },
+    "Center": {
+      "slots": [
+        [
+          "child",
+          false
+        ]
+      ],
+      "fields": []
+    },
+    "Align": {
+      "slots": [
+        [
+          "child",
+          false
+        ]
+      ],
+      "fields": []
+    },
+    "Padding": {
+      "slots": [
+        [
+          "child",
+          false
+        ]
+      ],
+      "fields": [
+        {
+          "name": "padding",
+          "type": "spacing"
+        }
+      ]
+    },
+    "SizedBox": {
+      "slots": [
+        [
+          "child",
+          false
+        ]
+      ],
+      "fields": [
+        {
+          "name": "width",
+          "type": "number"
+        },
+        {
+          "name": "height",
+          "type": "number"
+        }
+      ]
+    },
+    "Expanded": {
+      "slots": [
+        [
+          "child",
+          false
+        ]
+      ],
+      "fields": [
+        {
+          "name": "flex",
+          "type": "integer"
+        }
+      ]
+    },
+    "Flexible": {
+      "slots": [
+        [
+          "child",
+          false
+        ]
+      ],
+      "fields": [
+        {
+          "name": "flex",
+          "type": "integer"
+        }
+      ]
+    },
+    "Spacer": {
+      "slots": [],
+      "fields": [
+        {
+          "name": "flex",
+          "type": "integer"
+        }
+      ]
+    },
+    "Container": {
+      "slots": [
+        [
+          "child",
+          false
+        ]
+      ],
+      "fields": [
+        {
+          "name": "width",
+          "type": "number"
+        },
+        {
+          "name": "height",
+          "type": "number"
+        },
+        {
+          "name": "color",
+          "type": "color"
+        },
+        {
+          "name": "padding",
+          "type": "spacing"
+        },
+        {
+          "name": "margin",
+          "type": "spacing"
+        }
+      ]
+    },
+    "Card": {
+      "slots": [
+        [
+          "child",
+          false
+        ]
+      ],
+      "fields": [
+        {
+          "name": "color",
+          "type": "color"
+        },
+        {
+          "name": "elevation",
+          "type": "number"
+        },
+        {
+          "name": "margin",
+          "type": "spacing"
+        }
+      ]
+    },
+    "Material": {
+      "slots": [
+        [
+          "child",
+          false
+        ]
+      ],
+      "fields": [
+        {
+          "name": "color",
+          "type": "color"
+        },
+        {
+          "name": "elevation",
+          "type": "number"
+        }
+      ]
+    },
+    "DecoratedBox": {
+      "slots": [
+        [
+          "child",
+          false
+        ]
+      ],
+      "fields": []
+    },
+    "ConstrainedBox": {
+      "slots": [
+        [
+          "child",
+          false
+        ]
+      ],
+      "fields": []
+    },
+    "SingleChildScrollView": {
+      "slots": [
+        [
+          "child",
+          false
+        ]
+      ],
+      "fields": [
+        {
+          "name": "padding",
+          "type": "spacing"
+        },
+        {
+          "name": "reverse",
+          "type": "boolean"
+        }
+      ]
+    },
+    "AspectRatio": {
+      "slots": [
+        [
+          "child",
+          false
+        ]
+      ],
+      "fields": [
+        {
+          "name": "aspectRatio",
+          "type": "number",
+          "min": 0.001
+        }
+      ]
+    },
+    "ClipRRect": {
+      "slots": [
+        [
+          "child",
+          false
+        ]
+      ],
+      "fields": []
+    },
+    "Divider": {
+      "slots": [],
+      "fields": [
+        {
+          "name": "color",
+          "type": "color"
+        },
+        {
+          "name": "height",
+          "type": "number"
+        },
+        {
+          "name": "thickness",
+          "type": "number"
+        }
+      ]
+    },
+    "LinearProgressIndicator": {
+      "slots": [],
+      "fields": [
+        {
+          "name": "color",
+          "type": "color"
+        },
+        {
+          "name": "backgroundColor",
+          "type": "color"
+        },
+        {
+          "name": "minHeight",
+          "type": "number"
+        },
+        {
+          "name": "value",
+          "type": "number",
+          "max": 1
+        }
+      ]
+    },
+    "ListTile": {
+      "slots": [
+        [
+          "leading",
+          false
+        ],
+        [
+          "title",
+          false
+        ],
+        [
+          "subtitle",
+          false
+        ],
+        [
+          "trailing",
+          false
+        ]
+      ],
+      "fields": [
+        {
+          "name": "dense",
+          "type": "boolean"
+        }
+      ]
+    },
+    "CheckboxListTile": {
+      "slots": [
+        [
+          "title",
+          false
+        ],
+        [
+          "subtitle",
+          false
+        ],
+        [
+          "secondary",
+          false
+        ]
+      ],
+      "fields": [
+        {
+          "name": "activeColor",
+          "type": "color"
+        },
+        {
+          "name": "dense",
+          "type": "boolean"
+        }
+      ]
+    },
+    "ElevatedButton": {
+      "slots": [
+        [
+          "child",
+          false
+        ]
+      ],
+      "fields": []
+    },
+    "FilledButton": {
+      "slots": [
+        [
+          "child",
+          false
+        ]
+      ],
+      "fields": []
+    },
+    "OutlinedButton": {
+      "slots": [
+        [
+          "child",
+          false
+        ]
+      ],
+      "fields": []
+    },
+    "TextButton": {
+      "slots": [
+        [
+          "child",
+          false
+        ]
+      ],
+      "fields": []
+    },
+    "IconButton": {
+      "slots": [
+        [
+          "icon",
+          false
+        ]
+      ],
+      "fields": [
+        {
+          "name": "tooltip",
+          "type": "string"
+        }
+      ]
+    },
+    "FloatingActionButton": {
+      "slots": [
+        [
+          "child",
+          false
+        ]
+      ],
+      "fields": [
+        {
+          "name": "tooltip",
+          "type": "string"
+        },
+        {
+          "name": "backgroundColor",
+          "type": "color"
+        }
+      ]
+    },
+    "TextField": {
+      "slots": [],
+      "fields": [
+        {
+          "name": "maxLines",
+          "type": "integer"
+        },
+        {
+          "name": "obscureText",
+          "type": "boolean"
+        },
+        {
+          "name": "enabled",
+          "type": "boolean"
+        }
+      ]
+    },
+    "Image": {
+      "slots": [],
+      "fields": [
+        {
+          "name": "width",
+          "type": "number"
+        },
+        {
+          "name": "height",
+          "type": "number"
+        }
+      ]
+    },
+    "GestureDetector": {
+      "slots": [
+        [
+          "child",
+          false
+        ]
+      ],
+      "fields": []
+    },
+    "InkWell": {
+      "slots": [
+        [
+          "child",
+          false
+        ]
+      ],
+      "fields": []
+    },
+    "NavigationBar": {
+      "slots": [
+        [
+          "destinations",
+          true
+        ]
+      ],
+      "fields": [
+        {
+          "name": "backgroundColor",
+          "type": "color"
+        },
+        {
+          "name": "height",
+          "type": "number"
+        }
+      ]
+    },
+    "NavigationDestination": {
+      "slots": [
+        [
+          "icon",
+          false
+        ],
+        [
+          "selectedIcon",
+          false
+        ]
+      ],
+      "fields": [
+        {
+          "name": "label",
+          "type": "string"
+        }
+      ]
+    }
+  },
+  "palette": [
+    [
+      "Text",
+      "Text('New text')"
+    ],
+    [
+      "Icon",
+      "Icon(Icons.star_outline)"
+    ],
+    [
+      "SizedBox",
+      "SizedBox(height: 16)"
+    ],
+    [
+      "Padding",
+      "Padding(padding: EdgeInsets.all(16), child: Text('New text'))"
+    ],
+    [
+      "Center",
+      "Center(child: Text('New text'))"
+    ],
+    [
+      "Column",
+      "Column(children: [Text('New text')])"
+    ],
+    [
+      "Row",
+      "Row(children: [Text('New text')])"
+    ],
+    [
+      "Card",
+      "Card(child: Padding(padding: EdgeInsets.all(16), child: Text('Card')))"
+    ],
+    [
+      "Divider",
+      "Divider()"
+    ],
+    [
+      "FilledButton",
+      "FilledButton(onPressed: null, child: Text('Button'))"
+    ],
+    [
+      "TextField",
+      "TextField(decoration: InputDecoration(labelText: 'Label'))"
+    ],
+    [
+      "ListTile",
+      "ListTile(title: Text('List item'))"
+    ],
+    [
+      "AppBar",
+      "AppBar(title: Text('App'))"
+    ],
+    [
+      "NavigationDestination",
+      "NavigationDestination(icon: Icon(Icons.home_outlined), label: 'Home')"
+    ]
+  ],
+  "wrappers": [
+    [
+      "Padding",
+      "Padding(padding: const EdgeInsets.all(16), child: "
+    ],
+    [
+      "Center",
+      "Center(child: "
+    ],
+    [
+      "SizedBox",
+      "SizedBox(width: 240, child: "
+    ],
+    [
+      "Card",
+      "Card(child: "
+    ]
+  ]
+}

@@ -1,0 +1,390 @@
+[
+  {
+    "name": "list_projects",
+    "description": "List Flutter projects in the running local Freeflow workbench.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": false
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": false
+    }
+  },
+  {
+    "name": "list_files",
+    "description": "List visible Flutter project files. Build caches, symlinks and common credentials are skipped.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "type": "string",
+          "description": "Project ID from list_projects. Omit when the MCP connection is scoped to one project."
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": false
+    }
+  },
+  {
+    "name": "read_file",
+    "description": "Read UTF-8 source and obtain a revision for conflict-safe writes.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "type": "string",
+          "description": "Project ID from list_projects. Omit when the MCP connection is scoped to one project."
+        },
+        "path": {
+          "type": "string",
+          "description": "Project-relative path with forward slashes, e.g. lib/main.dart."
+        }
+      },
+      "required": [
+        "path"
+      ],
+      "additionalProperties": false
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": false
+    }
+  },
+  {
+    "name": "write_file",
+    "description": "Create or replace one project file. Read it first and pass its revision to avoid overwriting newer edits.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "type": "string",
+          "description": "Project ID from list_projects. Omit when the MCP connection is scoped to one project."
+        },
+        "path": {
+          "type": "string",
+          "description": "Project-relative path with forward slashes, e.g. lib/main.dart."
+        },
+        "revision": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Revision returned by read_file. Use null only for a new file."
+        },
+        "content": {
+          "type": "string",
+          "description": "The complete UTF-8 file content."
+        }
+      },
+      "required": [
+        "path",
+        "revision",
+        "content"
+      ],
+      "additionalProperties": false
+    },
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": false
+    }
+  },
+  {
+    "name": "inspect_widgets",
+    "description": "Read the supported visual widget tree and literal properties from a Dart file.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "type": "string",
+          "description": "Project ID from list_projects. Omit when the MCP connection is scoped to one project."
+        },
+        "path": {
+          "type": "string",
+          "description": "Project-relative path with forward slashes, e.g. lib/main.dart."
+        }
+      },
+      "required": [
+        "path"
+      ],
+      "additionalProperties": false
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": false
+    }
+  },
+  {
+    "name": "edit_widget",
+    "description": "Edit the Dart source through a visual operation. Use IDs and a revision from inspect_widgets.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "type": "string",
+          "description": "Project ID from list_projects. Omit when the MCP connection is scoped to one project."
+        },
+        "path": {
+          "type": "string",
+          "description": "Project-relative path with forward slashes, e.g. lib/main.dart."
+        },
+        "revision": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Revision returned by read_file. Use null only for a new file."
+        },
+        "command": {
+          "type": "object",
+          "required": [
+            "id",
+            "operation"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "type": "string",
+              "description": "Widget ID from inspect_widgets."
+            },
+            "operation": {
+              "enum": [
+                "property",
+                "add",
+                "wrap",
+                "remove",
+                "move"
+              ]
+            },
+            "name": {
+              "type": "string",
+              "description": "Property name for a property edit."
+            },
+            "value": {
+              "type": [
+                "string",
+                "number",
+                "boolean"
+              ]
+            },
+            "slot": {
+              "type": "string",
+              "description": "Available Dart child slot for add."
+            },
+            "widget": {
+              "type": "string",
+              "description": "Palette widget for add or wrapper type for wrap."
+            },
+            "target": {
+              "type": "string",
+              "description": "Sibling widget ID for move."
+            },
+            "side": {
+              "enum": [
+                "before",
+                "after"
+              ]
+            }
+          }
+        }
+      },
+      "required": [
+        "path",
+        "revision",
+        "command"
+      ],
+      "additionalProperties": false
+    },
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": false
+    }
+  },
+  {
+    "name": "start_preview",
+    "description": "Start the real local Flutter web preview and return its job. Check preview_status for the preview URL.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "type": "string",
+          "description": "Project ID from list_projects. Omit when the MCP connection is scoped to one project."
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    },
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true
+    }
+  },
+  {
+    "name": "preview_status",
+    "description": "Get the latest local preview status, URL and Flutter logs.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "type": "string",
+          "description": "Project ID from list_projects. Omit when the MCP connection is scoped to one project."
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": false
+    }
+  },
+  {
+    "name": "reload_preview",
+    "description": "Refresh the running Flutter preview after source edits.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "type": "string",
+          "description": "Project ID from list_projects. Omit when the MCP connection is scoped to one project."
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    },
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": false
+    }
+  },
+  {
+    "name": "analyze",
+    "description": "Run Flutter static analysis. Check job_status when the job finishes.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "type": "string",
+          "description": "Project ID from list_projects. Omit when the MCP connection is scoped to one project."
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    },
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true
+    }
+  },
+  {
+    "name": "test",
+    "description": "Run Flutter tests. Check job_status when the job finishes.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "type": "string",
+          "description": "Project ID from list_projects. Omit when the MCP connection is scoped to one project."
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    },
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true
+    }
+  },
+  {
+    "name": "build",
+    "description": "Export a local Flutter build artifact. An iOS IPA requires macOS, Xcode and signing.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "type": "string",
+          "description": "Project ID from list_projects. Omit when the MCP connection is scoped to one project."
+        },
+        "target": {
+          "enum": [
+            "web",
+            "android",
+            "apk",
+            "ios",
+            "source"
+          ]
+        },
+        "baseHref": {
+          "type": "string",
+          "description": "Optional web base path such as / or /my-app/."
+        },
+        "flavor": {
+          "type": "string",
+          "description": "Optional Android or iOS Flutter flavor."
+        }
+      },
+      "required": [
+        "target"
+      ],
+      "additionalProperties": false
+    },
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": true
+    }
+  },
+  {
+    "name": "job_status",
+    "description": "Read status, output and compiler logs for a Freeflow command.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "type": "string",
+          "description": "Project ID from list_projects. Omit when the MCP connection is scoped to one project."
+        },
+        "jobId": {
+          "type": "string",
+          "description": "Job ID returned by a tool."
+        },
+        "after": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "jobId"
+      ],
+      "additionalProperties": false
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": false
+    }
+  },
+  {
+    "name": "list_exports",
+    "description": "List build artifacts available in the Freeflow Export dialog.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "type": "string",
+          "description": "Project ID from list_projects. Omit when the MCP connection is scoped to one project."
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": false
+    }
+  }
+]

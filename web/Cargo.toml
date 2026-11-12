@@ -1,0 +1,27 @@
+[package]
+name = "freeflow-web"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+base64 = "0.22"
+gloo-timers = { version = "0.3", features = ["futures"] }
+js-sys = "0.3.107"
+regex = "1"
+serde_json = "1"
+wasm-bindgen = "=0.2.130"
+wasm-bindgen-futures = "0.4.80"
+web-sys = { version = "0.3.107", features = [
+  "Blob", "Clipboard", "console", "CssStyleDeclaration", "DataTransfer", "Document",
+  "DomRect", "DomTokenList", "DragEvent", "Element", "Event", "EventTarget", "File", "FileList",
+  "FileReader", "FormData", "Headers", "HtmlAnchorElement", "HtmlButtonElement",
+  "HtmlDialogElement", "HtmlElement", "HtmlFormElement", "HtmlIFrameElement",
+  "HtmlInputElement", "HtmlSelectElement", "HtmlTextAreaElement", "KeyboardEvent",
+  "MouseEvent", "Navigator", "Node", "NodeList", "Request", "RequestInit", "Response",
+  "ResizeObserver", "Storage", "Url", "UrlSearchParams", "Window",
+] }

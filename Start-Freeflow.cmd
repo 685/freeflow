@@ -1,10 +1,10 @@
 @echo off
 cd /d "%~dp0"
-where node.exe >nul 2>&1
+where cargo.exe >nul 2>&1
 if errorlevel 1 (
-  echo Freeflow requires Node.js 22.15 or newer. Download it from https://nodejs.org/
+  echo Freeflow requires Rust. Install it from https://rustup.rs/
   pause
   exit /b 1
 )
-node bin\freeflow.mjs %*
+cargo run --quiet --locked -p freeflow-build -- %*
 if errorlevel 1 pause

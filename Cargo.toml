@@ -1,0 +1,42 @@
+[package]
+name = "freeflow"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+description = "A local Flutter workbench with a visual editor, live preview, and MCP"
+
+[workspace]
+members = ["web", "tools/build"]
+default-members = ["."]
+resolver = "3"
+
+[dependencies]
+anyhow = "1"
+axum = { version = "0.8", default-features = false, features = ["http1", "json", "query", "tokio"] }
+base64 = "0.22"
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
+clap = { version = "4.6", features = ["derive", "env"] }
+dirs = "6"
+dunce = "1"
+getrandom = "0.3"
+hex = "0.4"
+mime_guess = "2"
+open = "5"
+regex = "1"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+subtle = "2"
+tempfile = "3"
+tokio = { version = "1", features = ["fs", "io-std", "io-util", "macros", "net", "process", "rt-multi-thread", "signal", "sync", "time"] }
+tokio-util = { version = "0.7", features = ["io", "rt"] }
+uuid = { version = "1", features = ["v4"] }
+zip = { version = "4", default-features = false }
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+[profile.release.package.freeflow-web]
+opt-level = "s"
+strip = "debuginfo"

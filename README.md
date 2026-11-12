@@ -4,11 +4,12 @@ Freeflow is an MIT-licensed Flutter workbench that runs on your computer. Create
 
 ## Start
 
-1. Install [Node.js 22.15 or newer](https://nodejs.org/) and [Git](https://git-scm.com/downloads).
-2. On Windows, double-click **Start-Freeflow.cmd**. On macOS or Linux, open a terminal in this folder and run **npm start**.
-3. Select **Try the sample** to run Daymark, or select **New project** or **Import project**.
+1. Install [Rust](https://rustup.rs/) and [Git](https://git-scm.com/downloads). On Windows, install the C++ build tools when Rust setup prompts you.
+2. Run **rustup target add wasm32-unknown-unknown** once to enable the browser build.
+3. On Windows, double-click **Start-Freeflow.cmd**. On macOS or Linux, run **cargo run --locked -p freeflow-build** in this folder.
+4. Select **Try the sample** to run Daymark, or select **New project** or **Import project**.
 
-The workbench opens at [http://127.0.0.1:4747](http://127.0.0.1:4747). No npm packages are required. Use **Settings → Install managed SDK** if Flutter is missing, or point Freeflow at an existing [Flutter SDK](https://docs.flutter.dev/install).
+The workbench opens at [http://127.0.0.1:4747](http://127.0.0.1:4747). Freeflow runs a native Rust server and a Rust browser interface compiled to WebAssembly. Apps are standard Flutter projects in Dart. Use **Settings → Install managed SDK** if Flutter is missing, or point Freeflow at an existing [Flutter SDK](https://docs.flutter.dev/install).
 
 ### Flutter updates
 
@@ -27,7 +28,7 @@ The device controls resize the web viewport. Use the Android or iOS tools to tes
 
 Open a project and select **AI Connect**. It generates project-scoped setup commands for **Codex**, **Claude Code** and **Claude Desktop**. Your client can edit project files, work with the visual widget tree, and run previews, analysis and builds. The MCP server uses standard STDIO for other local MCP clients as well.
 
-Use **npm start -- --no-open** to run Freeflow without opening a browser. The MCP client launches **node bin/freeflow.mjs mcp**. Start Freeflow first and pass the same **--home** to both processes if you use a custom data folder. Use Codex for ChatGPT-based local development. The [ChatGPT web app's MCP integration](https://help.openai.com/en/articles/12584461) connects to remote servers.
+Use **cargo run --locked -p freeflow-build -- --no-open** to run Freeflow without opening a browser. The **AI Connect** dialog generates commands for the native **freeflow mcp** executable. Start Freeflow first and pass the same **--home** to both processes if you use a custom data folder. Existing MCP clients need the updated command from **AI Connect**. Use Codex for ChatGPT-based local development. The [ChatGPT web app's MCP integration](https://help.openai.com/en/articles/12584461) connects to remote servers.
 
 Freeflow has no subscription or AI API requirement of its own. Your AI client and backend providers retain their own usage limits.
 
@@ -56,7 +57,7 @@ For the default Kotlin Gradle template, **Export → Google Play → Configure s
 
 ## Development
 
-Run **npm test** to check the workbench and **node bin/freeflow.mjs --help** for launch options. Freeflow listens on loopback and serves Flutter previews from a separate local origin. Project metadata, file history, the managed SDK and generated builds live under **~/.freeflow** by default. Use **--home** for another location, **--port** to change the workbench port, and **--no-open** for a headless session. Import Flutter projects you trust to run on this computer.
+Run **cargo test --locked** to check the workbench and **cargo run --locked -p freeflow -- --help** for launch options. Use **cargo run --locked -p freeflow-build -- --build-only** to compile the browser assets into **target/freeflow-web**. Freeflow listens on loopback and serves Flutter previews from a separate local origin. Project metadata, file history, the managed SDK and generated builds live under **~/.freeflow** by default. Use **--home** for another location, **--port** to change the workbench port, and **--no-open** for a headless session. Import Flutter projects you trust to run on this computer.
 
 To publish from an authenticated GitHub CLI, initialize and commit the source, then run **gh repo create freeflow --public --source . --remote origin --push** from the Freeflow folder.
 

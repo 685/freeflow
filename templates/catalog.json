@@ -1,0 +1,12 @@
+[
+  {
+    "id": "daymark",
+    "name": "Daily planner",
+    "description": "A styled daily dashboard with interactive tasks."
+  },
+  {
+    "id": "blank",
+    "name": "Blank app",
+    "description": "A Material app with a single starting screen."
+  }
+]
