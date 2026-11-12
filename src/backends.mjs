@@ -73,7 +73,7 @@ export function validateBackend(provider, input) {
   return provider === 'firebase' ? firebaseConfig(input) : supabaseConfig(input);
 }
 
-const env = name => "const String.fromEnvironment('" + name + "')";
+const env = (name, explicitConst = true) => (explicitConst ? 'const ' : '') + "String.fromEnvironment('" + name + "')";
 
 export function generateBackends(enabled) {
   if (!enabled.firebase && !enabled.supabase) return backendStub;
@@ -86,8 +86,8 @@ export function generateBackends(enabled) {
     helpers.push(
       '\n  static String? _optional(String value) => value.isEmpty ? null : value;\n',
       '\n  static FirebaseOptions _firebaseOptions() {',
-      '    const webId = ' + env('FIREBASE_APP_ID') + ';',
-      '    const webKey = ' + env('FIREBASE_API_KEY') + ';',
+      '    const webId = ' + env('FIREBASE_APP_ID', false) + ';',
+      '    const webKey = ' + env('FIREBASE_API_KEY', false) + ';',
       '    var appId = webId;',
       '    var apiKey = webKey;',
       '    String? iosBundleId;',
@@ -96,12 +96,12 @@ export function generateBackends(enabled) {
       '      switch (defaultTargetPlatform) {',
       '        case TargetPlatform.android:',
       '          appId = ' + env('FIREBASE_ANDROID_APP_ID') + ';',
-      '          const androidKey = ' + env('FIREBASE_ANDROID_API_KEY') + ';',
+      '          const androidKey = ' + env('FIREBASE_ANDROID_API_KEY', false) + ';',
       '          apiKey = androidKey.isEmpty ? webKey : androidKey;',
       '          break;',
       '        case TargetPlatform.iOS:',
       '          appId = ' + env('FIREBASE_IOS_APP_ID') + ';',
-      '          const iosKey = ' + env('FIREBASE_IOS_API_KEY') + ';',
+      '          const iosKey = ' + env('FIREBASE_IOS_API_KEY', false) + ';',
       '          apiKey = iosKey.isEmpty ? webKey : iosKey;',
       '          iosBundleId = _optional(' + env('FIREBASE_IOS_BUNDLE_ID') + ');',
       '          iosClientId = _optional(' + env('FIREBASE_IOS_CLIENT_ID') + ');',
@@ -129,8 +129,8 @@ export function generateBackends(enabled) {
   if (enabled.supabase) {
     imports.push("import 'package:supabase_flutter/supabase_flutter.dart';");
     statements.push(
-      '    const supabaseUrl = ' + env('SUPABASE_URL') + ';',
-      '    const supabaseKey = ' + env('SUPABASE_PUBLISHABLE_KEY') + ';',
+      '    const supabaseUrl = ' + env('SUPABASE_URL', false) + ';',
+      '    const supabaseKey = ' + env('SUPABASE_PUBLISHABLE_KEY', false) + ';',
       "    if (supabaseUrl.isEmpty || supabaseKey.isEmpty) throw StateError('Add Supabase settings in Freeflow.');",
       '    await Supabase.initialize(url: supabaseUrl, publishableKey: supabaseKey);',
     );
