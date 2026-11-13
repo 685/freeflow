@@ -17,6 +17,7 @@ use std::{
     future::Future,
     path::{Path, PathBuf},
     sync::{Arc, LazyLock, Mutex},
+    time::SystemTime,
 };
 use tokio::sync::Notify;
 use tokio_util::sync::CancellationToken;
@@ -738,10 +739,20 @@ impl Jobs {
         self.enqueue(format!("export-{}", target.id()), Some(project.clone()), mode, move |this, job| async move {
             let debug = target == Target::Android && signing::status(&this.projects, &project)["debugFallback"] == true;
             if debug { job.log("This project uses the default debug key. Configure an upload key before submitting to Google Play."); }
-            if target != Target::Source {
-                this.flutter_build(&job, &project, flags).await?;
-            }
-            let artifact = tokio::task::spawn_blocking(move || this.make_artifact(&job, &project, target, debug))
+            let output = match target {
+                Target::Ios => {
+                    let directory = project.root.join("build/ios/ipa");
+                    let previous = build_outputs(&directory, "ipa")?;
+                    this.flutter_build(&job, &project, flags).await?;
+                    Some(new_ipa(&directory, &previous)?)
+                }
+                Target::Source => None,
+                _ => {
+                    this.flutter_build(&job, &project, flags).await?;
+                    None
+                }
+            };
+            let artifact = tokio::task::spawn_blocking(move || this.make_artifact(&job, &project, target, debug, output))
                 .await.map_err(Problem::internal)??;
             Ok(json!({"artifact":artifact}))
         })
@@ -781,6 +792,7 @@ impl Jobs {
         project: &Project,
         target: Target,
         debug_signed: bool,
+        output: Option<PathBuf>,
     ) -> Result<Artifact> {
         job.check()?;
         let folder = self.export_dir(project).join(&job.id);
@@ -805,11 +817,15 @@ impl Jobs {
             Target::Web => {
                 archive::zip_folder(&project.root.join("build/web"), &file, false, &job.cancel)?
             }
+            Target::Ios => {
+                let ipa =
+                    output.ok_or_else(|| Problem::new(422, "Flutter did not produce an IPA."))?;
+                archive::copy_artifact(&ipa, &file)?;
+            }
             _ => {
                 let (directory, extension) = match target {
                     Target::Android => ("build/app/outputs/bundle", "aab"),
                     Target::Apk => ("build/app/outputs/flutter-apk", "apk"),
-                    Target::Ios => ("build/ios/ipa", "ipa"),
                     _ => unreachable!(),
                 };
                 let found = find_output(&project.root.join(directory), extension)?;
@@ -1068,40 +1084,80 @@ impl Target {
 }
 
 fn find_output(root: &Path, extension: &str) -> Result<PathBuf> {
-    let missing = || {
-        Problem::new(
-            422,
-            format!(
-                "Flutter did not produce the requested {} output.",
-                extension.to_uppercase()
-            ),
-        )
-    };
-    if !root.is_dir() {
-        return Err(missing());
-    }
-    let tree = files::walk(root, |_| true, false, 2500)?;
-    tree.entries
+    build_outputs(root, extension)?
         .into_iter()
-        .filter_map(|entry| {
-            let path = root.join(entry.path);
-            if !path
-                .extension()
+        .max_by_key(|output| output.modified)
+        .map(|output| output.path)
+        .ok_or_else(|| {
+            Problem::new(
+                422,
+                format!(
+                    "Flutter did not produce the requested {} output.",
+                    extension.to_uppercase()
+                ),
+            )
+        })
+}
+
+#[derive(PartialEq)]
+struct BuildOutput {
+    path: PathBuf,
+    modified: SystemTime,
+    size: u64,
+}
+
+fn build_outputs(root: &Path, extension: &str) -> Result<Vec<BuildOutput>> {
+    if !root.is_dir() {
+        return Ok(vec![]);
+    }
+    let files = files::walk(root, |_| true, false, 2500)?;
+    Ok(files
+        .entries
+        .into_iter()
+        .map(|entry| root.join(entry.path))
+        .filter(|path| {
+            path.extension()
                 .is_some_and(|ext| ext.eq_ignore_ascii_case(extension))
-            {
+        })
+        .filter_map(|path| {
+            let metadata = fs::symlink_metadata(&path).ok()?;
+            if !metadata.is_file() || files::is_link(&metadata) {
                 return None;
             }
-            let modified = fs::metadata(&path).ok()?.modified().ok()?;
-            Some((modified, path))
+            Some(BuildOutput {
+                path,
+                modified: metadata.modified().ok()?,
+                size: metadata.len(),
+            })
         })
-        .max_by_key(|(modified, _)| *modified)
-        .map(|(_, path)| path)
-        .ok_or_else(missing)
+        .collect())
+}
+
+fn new_ipa(root: &Path, previous: &[BuildOutput]) -> Result<PathBuf> {
+    build_outputs(root, "ipa")?
+        .into_iter()
+        .filter(|output| !previous.contains(output))
+        .max_by_key(|output| output.modified)
+        .map(|output| output.path)
+        .ok_or_else(|| {
+            Problem::new(422, "Flutter did not export a new IPA. Check the Xcode signing and export messages in the console.")
+        })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn failed_ipa_export_cannot_reuse_an_older_ipa() {
+        let folder = tempfile::tempdir().unwrap();
+        let old = folder.path().join("Runner.ipa");
+        fs::write(&old, b"old archive").unwrap();
+        let previous = build_outputs(folder.path(), "ipa").unwrap();
+        assert!(new_ipa(folder.path(), &previous).is_err());
+        fs::write(&old, b"fresh archive for upload").unwrap();
+        assert_eq!(new_ipa(folder.path(), &previous).unwrap(), old);
+    }
 
     #[test]
     fn release_versions_override_flutter_defaults_for_the_selected_export() {
