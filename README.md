@@ -18,12 +18,12 @@ Freeflow checks the official stable release feed at startup and periodically whi
 ## Build an app
 
 - **Design** shows the real Flutter web app and the widget tree. Use the cursor button to select a widget directly in a compatible Flutter debug preview. Edit supported properties, add a child, wrap a widget, or move it within a literal children list. Changes are saved to Dart source.
-- **Code** opens project files with Dart highlighting, tabs, formatting and per-file save history. **Split** keeps the live preview and code editor visible together. Use **Ctrl/Cmd + S** to save and **Ctrl/Cmd + P** to open files by name. Add image assets in **Files** and declare them in the project's pubspec.
+- **Code** opens project files with Dart highlighting, tabs, formatting and per-file save history. Use **Suggest** or **Ctrl/Cmd + Space** for completions, **F12** for a definition in the project, **Type** for symbol information and **Problems** for live diagnostics in the current Dart file. The Dart SDK checks unsaved code. **Split** shows the preview and editor together. Use **Ctrl/Cmd + S** to save and **Ctrl/Cmd + P** to open files by name.
 - **Plan** records your goal, screens and navigation in the project's **FREEFLOW_PLAN.md**. Switch between the screen planner and Markdown. **Plan with Agent** and **Build from plan** prepare prompts for review in the Agent panel.
 - **App theme** edits the seed color, scaffold background and font family in a supported Material theme. Use the code editor or Agent for custom theme expressions.
 - **Run** starts a Flutter preview. Source edits trigger a refresh. If the Flutter debug server cannot start, Freeflow compiles and serves the web app on a local port. The console shows package, compiler and build output. Use **Refresh Flutter dependencies**, **Analyze** and **Test** from the bottom toolbar.
 
-The device controls resize the web viewport. Use the Android or iOS tools to test native permissions, plugins and platform behavior.
+The preview device controls resize the web viewport. Use **Run on device** in the bottom bar to launch on a connected phone, running simulator or desktop target detected by Flutter. **Run settings** accepts a Flutter flavor and Dart defines. The device panel shows logs and offers hot reload and hot restart where supported. Launching on iOS requires a Mac with Xcode and signing set up.
 
 ## Connect your AI
 

@@ -22,6 +22,7 @@ pub fn render() {
             "analyze",
             "test",
             "dependencies",
+            "run-device",
         ] {
             disabled(control, !open);
         }
@@ -61,6 +62,7 @@ pub fn render() {
         explorer(state);
         inspector(state);
         crate::agent_panel::layout(state);
+        crate::device_panel::badge(state);
         editor(state);
     });
     state::change(|state| preview(state, true));
@@ -393,6 +395,10 @@ pub fn editor(state: &State) {
     let editing = state.mode != Mode::Design && !state.project.is_null();
     let planning = state.mode == Mode::Plan && !state.plan_markdown;
     hidden("editor", !editing || source.is_null() || planning);
+    hidden(
+        "dart-tools",
+        !state.mode.shows_code() || !file.ends_with(".dart") || source.is_null(),
+    );
     hidden("asset-view", !editing || !source.is_null() || planning);
     hidden("plan-layout", state.mode != Mode::Plan);
     hidden("plan-screen-view", !planning);

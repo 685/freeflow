@@ -117,6 +117,14 @@
         <div id="editor-tabs" class="editor-tabs" hidden></div>
         <div id="editor-notice" class="editor-notice" hidden></div>
         <div class="editor-wrap" id="editor"></div>
+        <div class="dart-tools" id="dart-tools" hidden>
+          <button type="button" id="dart-complete" class="button plain small" title="Suggest completions (Ctrl+Space)">Suggest</button>
+          <button type="button" id="dart-definition" class="button plain small" title="Go to definition (F12)">Definition</button>
+          <button type="button" id="dart-type" class="button plain small" title="Show type and documentation">Type</button>
+          <button type="button" id="dart-problems" class="button plain small" aria-expanded="false">Problems</button>
+        </div>
+        <div class="dart-popup" id="dart-popup" hidden></div>
+        <div class="dart-problems" id="dart-problem-list" hidden></div>
         <section id="plan-screen-view" class="plan-screen-view" aria-label="Screen planner" hidden>
           <div class="plan-screens" id="plan-screens"></div>
           <div class="plan-actions">
@@ -141,6 +149,7 @@
       <footer class="statusbar">
         <button type="button" id="console-toggle" class="button plain small" aria-expanded="false"><span data-icon="terminal"></span>Console<span id="console-indicator" class="notice-dot" hidden></span></button>
         <div class="status-right">
+          <button type="button" id="run-device" class="icon-button" aria-label="Run on device" title="Run on device" disabled><span data-icon="devices"></span></button>
           <button type="button" id="dependencies" class="icon-button" aria-label="Refresh Flutter dependencies" title="Refresh Flutter dependencies" disabled><span data-icon="reload"></span></button>
           <button type="button" id="analyze" class="button plain small" disabled><span data-icon="check-circle"></span>Analyze</button>
           <button type="button" id="test" class="button plain small" disabled><span data-icon="test"></span>Test</button>

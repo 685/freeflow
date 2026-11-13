@@ -56,6 +56,7 @@ pub struct Job {
     pub cancel: CancellationToken,
     done: CancellationToken,
     pub reload: Notify,
+    pub restart_device: Notify,
 }
 
 impl Job {
@@ -76,6 +77,7 @@ impl Job {
             cancel: CancellationToken::new(),
             done: CancellationToken::new(),
             reload: Notify::new(),
+            restart_device: Notify::new(),
         }
     }
 
@@ -121,7 +123,10 @@ impl Job {
                 }
             }
         }
-        if self.kind == "preview" && !state.result["url"].is_null() {
+        if self.kind == "device" {
+            state.result["debugUrl"] = Value::Null;
+            state.result["reloading"] = json!(false);
+        } else if self.kind == "preview" && !state.result["url"].is_null() {
             state.result["url"] = Value::Null;
             state.result["reloading"] = json!(false);
         }
@@ -148,6 +153,18 @@ impl Job {
 
     pub fn is_ready(&self) -> bool {
         self.state.lock().unwrap().status == "ready"
+    }
+
+    pub fn device_ready(&self, device: &str) {
+        let mut state = self.state.lock().unwrap();
+        state.status = "ready";
+        state.result["device"] = json!(device);
+        state.result["reloading"] = json!(false);
+        state.result["compileError"] = Value::Null;
+    }
+
+    pub fn device_debug_url(&self, url: String) {
+        self.state.lock().unwrap().result["debugUrl"] = json!(url);
     }
 
     pub fn restart(&self, epoch: u64) {
@@ -190,6 +207,7 @@ pub(crate) enum Mode {
     Exclusive,
     PausePreview,
     Preview,
+    Device,
     Sdk,
     Global,
 }
@@ -199,6 +217,7 @@ struct Queue {
     jobs: HashMap<String, Arc<Job>>,
     order: VecDeque<String>,
     previews: HashMap<String, Arc<Job>>,
+    devices: HashMap<String, Arc<Job>>,
     busy: HashMap<String, String>,
     sdk: Option<Arc<Job>>,
     closing: bool,
@@ -257,6 +276,27 @@ impl Jobs {
                 return Ok(active.view(0));
             }
         }
+        if matches!(mode, Mode::Device)
+            && project_id
+                .as_ref()
+                .and_then(|id| queue.devices.get(id))
+                .is_some_and(|job| !job.done.is_cancelled())
+        {
+            return Err(Problem::new(
+                409,
+                "This project already has a device session.",
+            ));
+        }
+        let device_running = project_id
+            .as_ref()
+            .and_then(|id| queue.devices.get(id))
+            .is_some_and(|job| !job.done.is_cancelled());
+        if device_running && matches!(mode, Mode::PausePreview | Mode::Preview) {
+            return Err(Problem::new(
+                409,
+                "Stop the device session before running this project command.",
+            ));
+        }
         if let Some(id) = &project_id {
             if queue.busy.contains_key(id) {
                 let message = if matches!(mode, Mode::Preview) {
@@ -270,7 +310,7 @@ impl Jobs {
 
         let job = Arc::new(Job::new(kind.into(), project_id));
         let paused = current_preview.filter(|job| {
-            matches!(mode, Mode::PausePreview)
+            matches!(mode, Mode::PausePreview | Mode::Device)
                 && !job.done.is_cancelled()
                 && !job.cancel.is_cancelled()
         });
@@ -283,6 +323,11 @@ impl Jobs {
                     .insert(job.project_id.clone().unwrap(), job.clone());
             }
             Mode::Sdk => queue.sdk = Some(job.clone()),
+            Mode::Device => {
+                queue
+                    .devices
+                    .insert(job.project_id.clone().unwrap(), job.clone());
+            }
             Mode::Global => {}
             _ => {
                 queue
@@ -316,6 +361,7 @@ impl Jobs {
                     let kept: HashSet<_> = queue
                         .previews
                         .values()
+                        .chain(queue.devices.values())
                         .chain(queue.sdk.iter())
                         .map(|job| job.id.clone())
                         .collect();
@@ -333,6 +379,7 @@ impl Jobs {
                     order.retain(|id| jobs.contains_key(id));
                 }
                 !queue.closing
+                    && matches!(mode, Mode::PausePreview)
                     && paused.as_ref().is_some_and(|preview| {
                         job.project_id
                             .as_ref()
@@ -457,6 +504,51 @@ impl Jobs {
 
     pub fn preview(&self, id: &str) -> Value {
         self.preview_job(id).map_or(Value::Null, |job| job.view(0))
+    }
+
+    pub fn device_session(&self, project: &str) -> Value {
+        self.queue
+            .lock()
+            .unwrap()
+            .devices
+            .get(project)
+            .map_or(Value::Null, |job| job.view(0))
+    }
+
+    pub fn device_control(&self, project: &str, action: &str) -> Result<Value> {
+        let job = self
+            .device_job(project)
+            .ok_or_else(|| Problem::new(404, "There is no active device session."))?;
+        match action {
+            "stop" => job.cancel.cancel(),
+            "reload" | "restart" if !job.is_ready() => {
+                return Err(Problem::new(
+                    409,
+                    "Wait for Flutter to start on the device.",
+                ));
+            }
+            "reload" => job.reload.notify_one(),
+            "restart" => job.restart_device.notify_one(),
+            _ => return Err(Problem::new(400, "Choose a device action.")),
+        }
+        Ok(job.view(0))
+    }
+
+    pub async fn stop_device(&self, project: &str) {
+        if let Some(job) = self.device_job(project) {
+            job.cancel.cancel();
+            job.done.cancelled().await;
+        }
+    }
+
+    fn device_job(&self, project: &str) -> Option<Arc<Job>> {
+        self.queue
+            .lock()
+            .unwrap()
+            .devices
+            .get(project)
+            .filter(|job| !job.done.is_cancelled())
+            .cloned()
     }
 
     pub fn start_preview(self: &Arc<Self>, project: Project) -> Result<Value> {

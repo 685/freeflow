@@ -112,6 +112,7 @@ fn changed() {
         .forget();
     }
     input_changed(input().value());
+    crate::editor_assist::changed();
 }
 
 pub fn initialize() {
@@ -126,6 +127,9 @@ pub fn initialize() {
         let Ok(key) = event.dyn_into::<KeyboardEvent>() else {
             return;
         };
+        if crate::editor_assist::key(&key) {
+            return;
+        }
         if key.key() == "Tab"
             && !key.shift_key()
             && !key.ctrl_key()
@@ -167,6 +171,14 @@ pub fn set(content: &str, dart: bool, keep: bool) {
     input.set_scroll_top(top);
     input.set_scroll_left(left);
     paint();
+    crate::editor_assist::source_ready(dart);
+}
+
+pub fn apply_edit(content: &str, position: u32) {
+    let field = input();
+    field.set_value(content);
+    let _ = field.set_selection_range(position, position);
+    changed();
 }
 
 pub fn go_to(line: u64, position: u32) {

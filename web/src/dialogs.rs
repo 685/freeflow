@@ -38,6 +38,9 @@ pub(crate) enum View {
         project: String,
     },
     GitClone,
+    Devices {
+        project: String,
+    },
     AgentSettings {
         project: String,
     },
@@ -96,6 +99,12 @@ fn view() -> (u64, View) {
 }
 pub(crate) fn current_view(version: u64) -> bool {
     dialog().open() && MODAL.with_borrow(|view| view.0 == version)
+}
+
+pub(crate) fn showing_devices(project: &str) -> bool {
+    dialog().open()
+        && MODAL
+            .with_borrow(|(_, view)| matches!(view, View::Devices {project: id} if id == project))
 }
 fn close() {
     dialog().close();
@@ -970,6 +979,9 @@ async fn submit_view(view: View, version: u64, mut input: Value) -> Result {
             close_current(version);
         }
         View::GitClone => crate::source_control::clone_project(version, input).await?,
+        View::Devices { project } if current(&project) => {
+            crate::device_panel::start(&project, version, input).await?;
+        }
         View::AgentSettings { project } if current(&project) => {
             crate::agent_panel::save_settings(&project, version, input).await?;
         }
@@ -1043,6 +1055,9 @@ async fn act(view: View, version: u64, action: &str, element: &Element) -> Resul
     match view {
         View::Projects if action == "import-folder" => import(),
         View::Projects if action == "clone-project" => crate::source_control::clone_dialog(),
+        View::Devices { project } if current(&project) => {
+            crate::device_panel::act(&project, version, action).await?;
+        }
         View::Git { project } if current(&project) => {
             crate::source_control::act(&project, version, action, element).await?;
         }

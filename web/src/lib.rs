@@ -1,7 +1,9 @@
 mod agent_panel;
+mod device_panel;
 mod dialogs;
 mod dom;
 mod editor;
+mod editor_assist;
 mod planner;
 mod preview_inspector;
 mod source_control;
@@ -68,6 +70,7 @@ pub async fn activate(project: Value) -> Result {
     if let Ok(Some(storage)) = ui::win().local_storage() {
         let _ = storage.set_item("freeflow-project", &project_id);
     }
+    editor_assist::reset();
     let generation = state::change(|state| {
         state.generation += 1;
         if let Some(url) = state.asset_url.take() {
@@ -110,6 +113,7 @@ pub async fn activate(project: Value) -> Result {
     if let Some(path) = path {
         load_file(&path, false).await?;
         update_preview(&project_id).await?;
+        device_panel::refresh(&project_id).await?;
     }
     Ok(())
 }
@@ -227,6 +231,9 @@ pub async fn load_file(file: &str, keep: bool) -> Result {
 
 pub async fn select(file: String, mode: Mode) -> Result {
     project_id()?;
+    if !mode.shows_code() || !file.ends_with(".dart") {
+        editor_assist::reset();
+    }
     let path = state::change(|state| {
         state.mode = mode;
         if mode != Mode::Plan {
@@ -554,6 +561,7 @@ async fn poll(tick: u32) -> Result {
     }
     if let Ok(project) = project_id() {
         agent_panel::poll(&project).await?;
+        device_panel::poll(&project).await?;
         update_preview(&project).await?;
         if tick.is_multiple_of(4) && current(&project) {
             refresh_tree(&project).await?;
@@ -1024,10 +1032,12 @@ fn code_mode() -> Mode {
 fn start() -> std::result::Result<(), JsValue> {
     ui::icons();
     editor::initialize();
+    editor_assist::initialize();
     dialogs::initialize();
     register_events();
     preview_inspector::initialize();
     agent_panel::initialize();
+    ui::click("run-device", || ui::spawn(device_panel::open()));
     planner::initialize();
     ui::click("app-theme", || ui::spawn(theme::open(None)));
     ui::click("git", || ui::spawn(source_control::open()));

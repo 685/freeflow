@@ -94,6 +94,17 @@ impl ProcessCommand {
         Ok(Command::from(command))
     }
 
+    pub fn stdio(&self, cwd: &Path) -> Result<Child> {
+        Ok(self
+            .command()?
+            .current_dir(cwd)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null())
+            .kill_on_drop(true)
+            .spawn()?)
+    }
+
     pub fn spawn(&self, cwd: Option<&Path>, keep_input: bool) -> Result<Process> {
         let mut command = self.command()?;
         if let Some(cwd) = cwd {

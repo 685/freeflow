@@ -222,6 +222,11 @@ svg { display: block; flex-shrink: 0; }
   flex: 0 0 34px; padding: 0 6px; border-top: 1px solid var(--border); background: #1b1c22;
 }
 .status-right { display: flex; align-items: center; gap: 2px; }
+#run-device.running { color: var(--success); }
+.device-session { display: grid; gap: 8px; margin-bottom: 10px; }
+.device-session pre { max-height: 200px; }
+.device-targets { display: grid; gap: 12px; }
+.device-targets .git-actions { justify-content: space-between; }
 .status-divider { width: 1px; height: 14px; margin: 0 5px; background: var(--border-strong); }
 .preview-status { display: flex; align-items: center; gap: 6px; color: var(--muted); padding: 0 7px 0 2px; font-size: 11px; white-space: nowrap; }
 .status-dot, .notice-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: #747587; }
@@ -275,6 +280,20 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--accent-bg); }
 .editor-tab.active { background: #17181e; border-top-color: var(--accent); color: var(--ink); }
 .editor-tab:hover { color: var(--ink); }
 .editor-wrap { flex: 1; min-height: 0; min-width: 0; position: relative; }
+.editing-pane { position: relative; }
+.dart-tools { display: flex; justify-content: flex-end; align-items: center; gap: 2px; min-height: 32px; border-top: 1px solid var(--border); padding: 0 4px; overflow-x: auto; }
+.dart-tools .button { font-size: 11px; padding-inline: 6px; }
+.dart-popup { position: absolute; z-index: 2; left: 45px; right: 12px; bottom: 38px; width: min(420px, calc(100% - 57px)); max-height: min(250px, 50%); overflow: auto; border: 1px solid #514863; border-radius: 7px; background: #23242d; box-shadow: 0 9px 25px #0008; }
+.dart-popup p, .dart-popup pre { margin: 0; padding: 9px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.dart-suggestion, .dart-problem { width: 100%; border: 0; background: transparent; text-align: left; padding: 6px 9px; }
+.dart-suggestion { display: flex; align-items: center; justify-content: space-between; gap: 6px; font: 11.5px var(--mono); }
+.dart-suggestion small, .dart-problem small { color: var(--muted); }
+.dart-suggestion.active, .dart-suggestion:hover, .dart-problem:hover { background: #383149; }
+.dart-problems { flex: 0 1 auto; max-height: 32%; min-height: 30px; overflow: auto; background: #1d1e26; border-top: 1px solid var(--border); padding-block: 3px; }
+.dart-problems p { margin: 5px 9px; color: var(--muted); }
+.dart-problem { display: grid; gap: 3px; font-size: 11px; }
+.dart-problem.error small { color: var(--error); }
+.dart-problem.warning small { color: var(--warning); }
 .plan-screen-view { display: flex; flex: 1; flex-direction: column; min-height: 0; }
 .plan-screens { flex: 1; align-content: start; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(210px, 100%), 1fr)); gap: 13px; overflow: auto; padding: 16px; }
 .plan-screen { background: var(--panel); border: 1px solid var(--border-strong); border-radius: 9px; padding: 12px; display: grid; gap: 8px; min-width: 0; }
@@ -417,5 +436,7 @@ textarea.editor-input::selection { background: #8470f34d; }
   .device-label { display: none; }
   .preview-toolbar { padding-inline: 8px; }
   .preview-toolbar .inline-actions { gap: 0; }
+  .statusbar .button.small { padding-inline: 3px; gap: 3px; }
+  .statusbar .icon-button { width: 24px; }
   .form-grid { grid-template-columns: 1fr; }
 }

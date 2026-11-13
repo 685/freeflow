@@ -77,12 +77,12 @@ pub async fn run(jobs: &Jobs, job: &Job, project: &Project) -> Result<()> {
 }
 
 #[derive(PartialEq)]
-struct Stamps {
-    code: Vec<(String, Option<(SystemTime, u64)>)>,
-    project: Vec<(String, Option<(SystemTime, u64)>)>,
+pub(crate) struct Stamps {
+    pub(crate) code: Vec<(String, Option<(SystemTime, u64)>)>,
+    pub(crate) project: Vec<(String, Option<(SystemTime, u64)>)>,
 }
 
-fn stamps(root: &Path) -> Result<Stamps> {
+pub(crate) fn stamps(root: &Path) -> Result<Stamps> {
     fn stamp(root: &Path, relative: String) -> (String, Option<(SystemTime, u64)>) {
         let metadata = fs::symlink_metadata(root.join(&relative))
             .ok()
@@ -169,7 +169,7 @@ async fn debug(
     result
 }
 
-fn watch() -> time::Interval {
+pub(crate) fn watch() -> time::Interval {
     let interval = Duration::from_millis(950);
     let mut watch = time::interval_at(Instant::now() + interval, interval);
     watch.set_missed_tick_behavior(MissedTickBehavior::Skip);

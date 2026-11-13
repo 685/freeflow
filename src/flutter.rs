@@ -166,6 +166,30 @@ impl Flutter {
         })
     }
 
+    pub fn dart_analyzer(&self) -> Result<ProcessCommand> {
+        let flutter = self.require()?;
+        let name = if cfg!(windows) { "dart.exe" } else { "dart" };
+        let path = dunce::canonicalize(&flutter.file)
+            .ok()
+            .and_then(|file| {
+                file.parent()
+                    .map(|bin| bin.join("cache/dart-sdk/bin").join(name))
+            })
+            .filter(|file| file.is_file())
+            .or_else(|| processes::executable(name))
+            .ok_or_else(|| {
+                Problem::new(
+                    422,
+                    "The Dart SDK is missing. Select an installed Flutter SDK in Settings.",
+                )
+            })?;
+        let mut command = ProcessCommand::new(path, ["language-server", "--protocol=lsp"]);
+        command
+            .env
+            .push(("DART_SUPPRESS_ANALYTICS".into(), "true".into()));
+        Ok(command)
+    }
+
     pub fn status(&self) -> Result<Value> {
         let settings = self.settings()?;
         let selected = self.selected()?;

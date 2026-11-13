@@ -1,9 +1,10 @@
 use crate::{
-    agent, backends,
+    agent, backends, devices,
     files::{self, Problem, Result, Session},
     flutter::Flutter,
     git, inspector,
     jobs::Jobs,
+    language::Analyzers,
     mcp::{self, required, revision},
     projects::{self, Project, Projects},
     signing, visual,
@@ -49,6 +50,7 @@ struct Workbench {
     browser_wasm: Bytes,
     bin: PathBuf,
     jobs: Arc<Jobs>,
+    analyzers: Analyzers,
     downloads: Mutex<HashMap<String, Download>>,
 }
 
@@ -84,6 +86,7 @@ pub async fn serve(
         browser_wasm,
         bin,
         jobs: jobs.clone(),
+        analyzers: Analyzers::default(),
         downloads: Mutex::new(HashMap::new()),
     });
     let session = home.join("session.json");
@@ -101,6 +104,14 @@ pub async fn serve(
         loop {
             interval.tick().await;
             let _ = update.auto_update().await;
+        }
+    });
+    let idle_state = state.clone();
+    let idle_timer = tokio::spawn(async move {
+        let mut interval = tokio::time::interval(Duration::from_secs(60));
+        loop {
+            interval.tick().await;
+            idle_state.analyzers.prune();
         }
     });
     let router = Router::new()
@@ -124,6 +135,7 @@ pub async fn serve(
         })
         .await;
     timer.abort();
+    idle_timer.abort();
     jobs.close().await;
     if files::read_json::<Session>(&session)
         .ok()
@@ -497,6 +509,8 @@ async fn project_route(
             "history" => json!(projects.history(&project, &file)?),
             "history-version" => projects.history_version(&project, &file, &query(url, "id"))?,
             "preview" => jobs.preview(&project.id),
+            "device" => jobs.device_session(&project.id),
+            "devices" => devices::list(jobs, &project).await?,
             "jobs" => json!(jobs.list(&project.id)),
             "artifacts" => json!(jobs.artifacts(&project)?),
             "backends" => backends::state(projects, &project)?,
@@ -543,6 +557,7 @@ async fn project_route(
                 (200, json!(source))
             }
             "inspect" => (200, inspector::resolve(projects, &project, &input)?),
+            "editor" => (200, state.analyzers.editor(jobs, &project, &input).await?),
             "git" => (202, git::operation(jobs, project, &input)?),
             "agent" => (202, agent::operation(jobs, project, &input)?),
             "preview" => match input["action"].as_str() {
@@ -551,6 +566,17 @@ async fn project_route(
                 Some("stop") => (200, jobs.stop_preview(&project.id).await),
                 _ => return Err(Problem::new(400, "Choose a preview action.")),
             },
+            "device" => {
+                let action = required(&input, "action")?;
+                if action == "start" {
+                    (
+                        202,
+                        devices::start(jobs, project, required(&input, "device")?, &input).await?,
+                    )
+                } else {
+                    (202, jobs.device_control(&project.id, action)?)
+                }
+            }
             "command" => match input["action"].as_str() {
                 Some(action @ ("analyze" | "test")) => (202, jobs.analyze(project, action)?),
                 Some("dependencies") => (202, jobs.refresh_dependencies(project)?),
@@ -578,11 +604,13 @@ async fn project_route(
                 )?,
             ),
             "forget" => {
+                jobs.stop_device(&project.id).await;
                 jobs.stop_preview(&project.id).await;
                 if jobs.busy(&project.id) {
                     return Err(Problem::new(409, "Wait for the project command to finish."));
                 }
                 projects.forget(&project.id)?;
+                state.analyzers.forget(&project.id);
                 (200, json!({"removed":true}))
             }
             "download" => {

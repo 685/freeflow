@@ -1,11 +1,13 @@
 mod agent;
 mod archive;
 mod backends;
+mod devices;
 mod files;
 mod flutter;
 mod git;
 mod inspector;
 mod jobs;
+mod language;
 mod mcp;
 mod preview;
 mod processes;
