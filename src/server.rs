@@ -1,5 +1,5 @@
 use crate::{
-    agent, backends, devices,
+    agent, backends, deploy, devices,
     files::{self, Problem, Result, Session},
     flutter::Flutter,
     git, inspector,
@@ -7,7 +7,7 @@ use crate::{
     language::Analyzers,
     mcp::{self, required, revision},
     projects::{self, Project, Projects},
-    signing, visual,
+    signing, stores, visual,
 };
 use axum::{
     Json, Router,
@@ -509,6 +509,8 @@ async fn project_route(
             "history" => json!(projects.history(&project, &file)?),
             "history-version" => projects.history_version(&project, &file, &query(url, "id"))?,
             "preview" => jobs.preview(&project.id),
+            "web-publish" => deploy::state(jobs, &project)?,
+            "store-upload" => stores::state(projects, &project)?,
             "device" => jobs.device_session(&project.id),
             "devices" => devices::list(jobs, &project).await?,
             "jobs" => json!(jobs.list(&project.id)),
@@ -590,6 +592,11 @@ async fn project_route(
                 202,
                 jobs.build(project, required(&input, "target")?, &input)?,
             ),
+            "web-publish" if input["action"] == "configure" => {
+                (200, deploy::configure(jobs, &project, &input)?)
+            }
+            "web-publish" => (202, deploy::operation(jobs, project, &input)?),
+            "store-upload" => (202, stores::submit(jobs, project, &input)?),
             "backends" => (
                 202,
                 jobs.integrate(project, required(&input, "provider")?, &input["config"])?,

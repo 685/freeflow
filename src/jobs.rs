@@ -732,17 +732,10 @@ impl Jobs {
             Mode::PausePreview
         };
         self.enqueue(format!("export-{}", target.id()), Some(project.clone()), mode, move |this, job| async move {
-            let mut debug = false;
+            let debug = target == Target::Android && signing::status(&this.projects, &project)["debugFallback"] == true;
+            if debug { job.log("This project uses the default debug key. Configure an upload key before submitting to Google Play."); }
             if target != Target::Source {
-                let sdk = this.flutter.require()?;
-                debug = target == Target::Android && signing::status(&this.projects, &project)["debugFallback"] == true;
-                if debug { job.log("This project uses the default debug key. Configure an upload key before submitting to Google Play."); }
-                this.pub_command(&job, &project, &sdk, &["pub", "get"]).await?;
-                let mut args = vec!["build".into()];
-                args.extend(flags);
-                args.push("--no-pub".into());
-                args.extend(backends::options(&this.projects.home, &project)?);
-                job.exec(&this.flutter.command(&sdk, args)?, &project.root).await?;
+                this.flutter_build(&job, &project, flags).await?;
             }
             let artifact = tokio::task::spawn_blocking(move || this.make_artifact(&job, &project, target, debug))
                 .await.map_err(Problem::internal)??;
@@ -750,6 +743,30 @@ impl Jobs {
         })
     }
 
+    async fn flutter_build(&self, job: &Job, project: &Project, flags: Vec<String>) -> Result<()> {
+        let sdk = self.flutter.require()?;
+        self.pub_command(job, project, &sdk, &["pub", "get"])
+            .await?;
+        let mut args = vec![OsString::from("build")];
+        args.extend(flags.into_iter().map(OsString::from));
+        args.push("--no-pub".into());
+        args.extend(
+            backends::options(&self.projects.home, project)?
+                .into_iter()
+                .map(OsString::from),
+        );
+        job.exec(&self.flutter.command(&sdk, args)?, &project.root)
+            .await
+    }
+
+    pub async fn build_site(&self, job: &Job, project: &Project, output: &Path) -> Result<()> {
+        let target = output.to_str().ok_or_else(|| {
+            Problem::new(422, "Select a Flutter build directory with a UTF-8 path.")
+        })?;
+        let mut flags = Target::Web.flags(&Value::Null)?;
+        flags.extend(["--output".into(), target.into()]);
+        self.flutter_build(job, project, flags).await
+    }
     fn export_dir(&self, project: &Project) -> PathBuf {
         self.projects.home.join("exports").join(&project.id)
     }

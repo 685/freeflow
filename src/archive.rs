@@ -18,6 +18,16 @@ pub fn zip_folder(
     } else {
         |_| true
     };
+    zip_files(root, output, include, u32::MAX as u64, cancel)
+}
+
+pub fn zip_files(
+    root: &Path,
+    output: &Path,
+    include: fn(&str) -> bool,
+    limit: u64,
+    cancel: &CancellationToken,
+) -> Result<()> {
     let tree = files::walk(root, include, false, 20_000)?;
     if tree.truncated {
         return Err(Problem::new(
@@ -37,10 +47,10 @@ pub fn zip_folder(
             continue;
         }
         total = total.saturating_add(meta.len() + 96 + 2 * item.path.len() as u64);
-        if total >= u32::MAX as u64 || item.path.len() > u16::MAX as usize {
+        if total >= limit || item.path.len() > u16::MAX as usize {
             return Err(Problem::new(
                 413,
-                "ZIP exports are limited to 4 GiB and standard ZIP paths.",
+                "The export exceeds its ZIP size or path limit.",
             ));
         }
         #[cfg(unix)]

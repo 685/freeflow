@@ -1,6 +1,7 @@
 mod agent;
 mod archive;
 mod backends;
+mod deploy;
 mod devices;
 mod files;
 mod flutter;
@@ -14,6 +15,7 @@ mod processes;
 mod projects;
 mod server;
 mod signing;
+mod stores;
 #[cfg(test)]
 mod tests;
 mod visual;

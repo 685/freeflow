@@ -64,7 +64,11 @@ Freeflow passes public client configuration with **--dart-define-from-file**. Fi
 | App Store | Signed IPA | macOS, Xcode, an Apple team and signing configuration |
 | Flutter source | ZIP containing the project | A Flutter SDK to continue on another machine |
 
-For the default Kotlin Gradle template, **Export → Google Play → Configure signing** accepts your existing upload keystore. Other Gradle layouts can use [Flutter's Android signing instructions](https://docs.flutter.dev/deployment/android#sign-the-app). Upload the AAB in Google Play Console. For iOS, set the team and bundle identifier in Xcode first, then upload the IPA in App Store Connect. On Windows you can export the Flutter source and continue on a Mac. See [Flutter's iOS release guide](https://docs.flutter.dev/deployment/ios).
+- **Web**. Open **Export → Web → Publish website**. Save your Netlify team slug and [personal access token](https://docs.netlify.com/api-and-cli-guides/api-guides/get-started-with-api/#personal-access-tokens). Freeflow builds the app locally and creates a site in your team. **Update deployment** replaces the build at the same URL. **Unpublish** disables the site, and **Publish** enables it again after the new build is ready. Use **Refresh status** to check an interrupted upload. The hosting token is saved under the local Freeflow data folder.
+- **Google Play**. For the default Kotlin Gradle template, **Configure signing** accepts your upload keystore. Other Gradle layouts can use [Flutter's Android signing instructions](https://docs.flutter.dev/deployment/android#sign-the-app). Upload the first AAB in Play Console. After that, build a signed AAB and use **Upload release build** with your package name, target track and [service account JSON](https://developers.google.com/android-publisher/getting_started). The form defaults to a draft on the internal track.
+- **App Store**. Create the app in App Store Connect and set its team and bundle identifier in Xcode. Build the signed IPA on macOS, then use **Upload release build** with your [App Store Connect team key](https://developer.apple.com/help/app-store-connect/get-started/app-store-connect-api/). Apple processes the build before you can distribute it in TestFlight or submit it for review. On Windows, export the Flutter source to continue on a Mac.
+
+Store upload keys are used for the selected upload. Freeflow saves a local receipt after the store accepts the build.
 
 ## Development
 
@@ -72,4 +76,4 @@ Run **cargo test --locked** to check the workbench and **cargo run --locked -p f
 
 ## Current scope
 
-Freeflow 0.1 covers local Flutter development, visual edits for supported Dart constructors, project AI, Git source control, backend setup and local export builds. Hosted collaboration, managed web hosting, automated store submissions and a visual editor for arbitrary dynamic Dart UI are outside this release.
+Freeflow 0.1 covers local Flutter development, visual edits for supported Dart constructors, project AI, Git source control, backend setup, exports, Netlify publishing and store build uploads. Hosted collaboration, store review workflows and visual editing of arbitrary dynamic Dart UI are outside this release.

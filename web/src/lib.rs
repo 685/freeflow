@@ -8,8 +8,10 @@ mod planner;
 mod preview_inspector;
 mod source_control;
 mod state;
+mod store_upload;
 mod theme;
 mod view;
+mod web_publish;
 
 use crate::{
     dom::{

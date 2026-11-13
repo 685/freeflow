@@ -64,6 +64,13 @@ pub(crate) enum View {
         signing: Value,
         blocked: bool,
     },
+    WebPublish {
+        project: String,
+    },
+    StoreUpload {
+        project: String,
+        target: String,
+    },
     Signing {
         project: String,
     },
@@ -373,7 +380,7 @@ fn render_ai(config: Value, client: &str) {
     );
 }
 
-async fn copy(value: &str, description: &str) -> Result {
+pub(crate) async fn copy(value: &str, description: &str) -> Result {
     JsFuture::from(dom::win().navigator().clipboard().write_text(value))
         .await
         .map_err(|_| Error::new("Select and copy the text manually."))?;
@@ -557,6 +564,10 @@ pub async fn exports(selected: &str) -> Result {
             "",
             "Use / for a domain or /my-app/ for a subfolder.",
         ));
+        content.push_str(&format!(
+            r#"<div class="form-row">{}</div>"#,
+            button("web-publish", "Publish website", "globe", "outline")
+        ));
     }
     if matches!(selected, "android" | "apk" | "ios") && !blocked {
         content.push_str(&format!(
@@ -608,6 +619,17 @@ pub async fn exports(selected: &str) -> Result {
     }
     if selected == "source" {
         content.push_str(&callout("Includes your Flutter source, assets and platform projects. Backend defines and signing keys stay in their local folders.", false));
+    }
+    if matches!(selected, "android" | "ios")
+        && !blocked
+        && items(&records)
+            .iter()
+            .any(|entry| entry["target"] == selected && entry["debugSigned"] != true)
+    {
+        content.push_str(&format!(
+            r#"<div class="form-row">{}</div>"#,
+            button("store-upload", "Upload release build", "export", "outline")
+        ));
     }
     let actions = if blocked {
         button("ios-source", "Switch to source export", "zip", "outline")
@@ -970,6 +992,12 @@ fn form_data(form: &Element) -> Value {
 
 async fn submit_view(view: View, version: u64, mut input: Value) -> Result {
     match view {
+        View::WebPublish { project } if current(&project) => {
+            crate::web_publish::configure(&project, version, input).await?;
+        }
+        View::StoreUpload { project, target } if current(&project) => {
+            crate::store_upload::submit(&project, &target, version, input).await?;
+        }
         View::Create => {
             new_project(input, false).await?;
             close_current(version);
@@ -1053,6 +1081,12 @@ async fn submit_view(view: View, version: u64, mut input: Value) -> Result {
 
 async fn act(view: View, version: u64, action: &str, element: &Element) -> Result {
     match view {
+        View::WebPublish { project } if current(&project) => {
+            crate::web_publish::act(&project, version, action).await?;
+        }
+        View::StoreUpload { project, target } if current(&project) && action == "store-back" => {
+            exports(&target).await?;
+        }
         View::Projects if action == "import-folder" => import(),
         View::Projects if action == "clone-project" => crate::source_control::clone_dialog(),
         View::Devices { project } if current(&project) => {
@@ -1107,6 +1141,7 @@ async fn act(view: View, version: u64, action: &str, element: &Element) -> Resul
         },
         View::Export {
             project,
+            target: selected,
             records,
             signing: config,
             ..
@@ -1117,6 +1152,10 @@ async fn act(view: View, version: u64, action: &str, element: &Element) -> Resul
                 exports("source").await?;
             } else if action == "android-signing" {
                 signing(project, config);
+            } else if action == "web-publish" {
+                crate::web_publish::open().await?;
+            } else if action == "store-upload" {
+                crate::store_upload::open(&selected).await?;
             } else if let Some(key) = action.strip_prefix("download-") {
                 if let Some(record) = records.iter().find(|record| record["id"] == key) {
                     let next = project_post(&project, "download", json!({"id":key})).await?;
