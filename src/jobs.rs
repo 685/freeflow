@@ -31,6 +31,10 @@ static WEB_BASE: LazyLock<Regex> =
 static FLAVOR: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"^[A-Za-z][A-Za-z0-9_-]{0,39}$").unwrap());
 static EXPORT_SLUG: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"[^a-z0-9_-]+").unwrap());
+static IOS_VERSION: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"^[0-9]+(?:\.[0-9]+){2}$").unwrap());
+static IOS_BUILD: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"^[0-9]+(?:\.[0-9]+){0,2}$").unwrap());
 
 #[derive(Clone, Serialize)]
 struct Line {
@@ -1013,7 +1017,53 @@ impl Target {
         if !flavor.is_empty() {
             result.extend(["--flavor".into(), flavor.into()]);
         }
+        if matches!(self, Self::Android | Self::Ios) {
+            self.release_version_flags(input, &mut result)?;
+        }
         Ok(result)
+    }
+
+    fn release_version_flags(self, input: &Value, flags: &mut Vec<String>) -> Result<()> {
+        let name = input["buildName"].as_str().unwrap_or_default().trim();
+        if !name.is_empty() {
+            if name.len() > 80 || name.chars().any(char::is_control) {
+                return Err(Problem::new(
+                    400,
+                    "Enter a valid version of at most 80 characters.",
+                ));
+            }
+            if self == Self::Ios && !IOS_VERSION.is_match(name) {
+                return Err(Problem::new(400, "Enter an iOS version like 1.2.0."));
+            }
+            flags.push(format!("--build-name={name}"));
+        }
+        let number = input["buildNumber"].as_str().unwrap_or_default().trim();
+        if number.is_empty() {
+            return Ok(());
+        }
+        match self {
+            Self::Android => {
+                let number = number
+                    .parse::<u32>()
+                    .ok()
+                    .filter(|value| (1..=2_100_000_000).contains(value))
+                    .filter(|_| number.bytes().all(|byte| byte.is_ascii_digit()))
+                    .ok_or_else(|| {
+                        Problem::new(400, "Enter an Android version code from 1 to 2100000000.")
+                    })?;
+                flags.push(format!("--build-number={number}"));
+            }
+            Self::Ios if number.len() <= 32 && IOS_BUILD.is_match(number) => {
+                flags.push(format!("--build-number={number}"));
+            }
+            _ => {
+                return Err(Problem::new(
+                    400,
+                    "Enter an iOS build number like 42 or 1.2.3.",
+                ));
+            }
+        }
+        Ok(())
     }
 }
 
@@ -1047,4 +1097,52 @@ fn find_output(root: &Path, extension: &str) -> Result<PathBuf> {
         .max_by_key(|(modified, _)| *modified)
         .map(|(_, path)| path)
         .ok_or_else(missing)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn release_versions_override_flutter_defaults_for_the_selected_export() {
+        assert_eq!(
+            Target::Android.flags(&Value::Null).unwrap(),
+            ["appbundle", "--release"]
+        );
+        assert_eq!(
+            Target::Android
+                .flags(&json!({"buildName":"2.1 beta", "buildNumber":"0042"}))
+                .unwrap(),
+            [
+                "appbundle",
+                "--release",
+                "--build-name=2.1 beta",
+                "--build-number=42"
+            ]
+        );
+        assert_eq!(
+            Target::Ios
+                .flags(&json!({"flavor":"testing", "buildName":"2.1.0", "buildNumber":"1.2.3"}))
+                .unwrap(),
+            [
+                "ipa",
+                "--release",
+                "--export-method",
+                "app-store",
+                "--flavor",
+                "testing",
+                "--build-name=2.1.0",
+                "--build-number=1.2.3"
+            ]
+        );
+        for value in ["0", "1.2", "2100000001", "+2", "--debug"] {
+            assert!(
+                Target::Android
+                    .flags(&json!({"buildNumber":value}))
+                    .is_err()
+            );
+        }
+        assert!(Target::Ios.flags(&json!({"buildName":"2.1-beta"})).is_err());
+        assert!(Target::Ios.flags(&json!({"buildNumber":"1..2"})).is_err());
+    }
 }

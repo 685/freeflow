@@ -68,7 +68,7 @@ Freeflow passes public client configuration with **--dart-define-from-file**. Fi
 - **Google Play**. For the default Kotlin Gradle template, **Configure signing** accepts your upload keystore. Other Gradle layouts can use [Flutter's Android signing instructions](https://docs.flutter.dev/deployment/android#sign-the-app). Upload the first AAB in Play Console. After that, build a signed AAB and use **Upload release build** with your package name, target track and [service account JSON](https://developers.google.com/android-publisher/getting_started). The form defaults to a draft on the internal track.
 - **App Store**. Create the app in App Store Connect and set its team and bundle identifier in Xcode. Build the signed IPA on macOS, then use **Upload release build** with your [App Store Connect team key](https://developer.apple.com/help/app-store-connect/get-started/app-store-connect-api/). Apple processes the build before you can distribute it in TestFlight or submit it for review. On Windows, export the Flutter source to continue on a Mac.
 
-Store upload keys are used for the selected upload. Freeflow saves a local receipt after the store accepts the build.
+For Google Play and App Store exports, use **Build options** to set the app version and build number for that export. Blank fields use the values in pubspec.yaml. Store upload keys are used for the selected upload. Freeflow saves a local receipt after the store accepts the build.
 
 ## Development
 

@@ -570,8 +570,34 @@ pub async fn exports(selected: &str) -> Result {
         ));
     }
     if matches!(selected, "android" | "apk" | "ios") && !blocked {
+        let versions = if selected == "apk" {
+            String::new()
+        } else {
+            let (label, number) = if selected == "ios" {
+                ("Build number", "42 or 1.2.3")
+            } else {
+                ("Version code", "42")
+            };
+            format!(
+                r#"<div class="form-grid">{}{}</div><p class="dialog-help">Leave version fields blank to use pubspec.yaml.</p>"#,
+                field(
+                    "buildName",
+                    "App version",
+                    "",
+                    r#"placeholder="1.2.0" maxlength="80""#,
+                    ""
+                ),
+                field(
+                    "buildNumber",
+                    label,
+                    "",
+                    &format!(r#"placeholder="{number}" maxlength="32""#),
+                    ""
+                ),
+            )
+        };
         content.push_str(&format!(
-            "<details><summary>Build options</summary>{}</details>",
+            "<details><summary>Build options</summary>{}{versions}</details>",
             field(
                 "flavor",
                 "Flutter flavor",
