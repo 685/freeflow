@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Flutter phone preview</title>
+  <style>
+    html { height: 100%; color-scheme: light dark; }
+    body { height: 100%; margin: 0; display: flex; flex-direction: column; font: 15px system-ui, sans-serif; }
+    iframe { flex: 1; width: 100%; min-height: 0; border: 0; }
+    p { margin: 0; padding: 12px; text-align: center; }
+  </style>
+  <script defer src="watch.js"></script>
+</head>
+<body>
+  <p id="status" role="status">Connecting to Freeflow…</p>
+  <iframe title="Flutter app" allow="fullscreen" hidden></iframe>
+</body>
+</html>

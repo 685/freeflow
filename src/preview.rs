@@ -295,12 +295,13 @@ async fn debug_session(
     }
 }
 
-async fn compile(
+pub(crate) async fn compile(
     jobs: &Jobs,
     job: &Job,
     project: &Project,
     sdk: &Sdk,
     output: &Path,
+    base: Option<&str>,
 ) -> Result<PathBuf> {
     let mut args: Vec<OsString> = [
         "build",
@@ -314,11 +315,15 @@ async fn compile(
     .map(Into::into)
     .collect();
     args.push(output.as_os_str().into());
+    if let Some(base) = base {
+        args.push(format!("--base-href={base}").into());
+    }
     args.extend(
         backends::options(&jobs.projects.home, project)?
             .into_iter()
             .map(OsString::from),
     );
+    let _build = jobs.flutter_build_slot(job, project).await?;
     job.exec(&jobs.flutter.command(sdk, args)?, &project.root)
         .await?;
     let bootstrap = output.join("flutter_bootstrap.js");
@@ -345,7 +350,7 @@ async fn compiled(
         .tempdir_in(&parent)?;
     let mut last = stamps(&project.root)?;
     let mut generation = 0;
-    let output = compile(jobs, job, project, sdk, &folder.path().join("web-0")).await?;
+    let output = compile(jobs, job, project, sdk, &folder.path().join("web-0"), None).await?;
     let site = Site::start(output).await?;
     job.ready(&site.url, epoch, false);
     job.log("Preview ready. Flutter recompiles when source files change.");
@@ -373,7 +378,7 @@ async fn compiled(
             if changed_project {
                 jobs.pub_command(job, project, sdk, &["pub", "get"]).await?;
             }
-            compile(jobs, job, project, sdk, &next).await
+            compile(jobs, job, project, sdk, &next, None).await
         };
         match rebuild.await {
             Ok(path) => {

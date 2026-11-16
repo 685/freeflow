@@ -6,6 +6,7 @@ use crate::{
     jobs::Jobs,
     language::Analyzers,
     mcp::{self, required, revision},
+    phone_preview,
     projects::{self, Project, Projects},
     signing, stores, visual,
 };
@@ -181,7 +182,7 @@ fn text(content: impl Into<Body>, kind: &'static str) -> Response {
         .unwrap()
 }
 
-async fn stream(path: &Path, name: Option<&str>) -> Result<Response> {
+pub(crate) async fn stream(path: &Path, name: Option<&str>) -> Result<Response> {
     let file = tokio::fs::File::open(path).await.map_err(|error| {
         if files::missing(&error) {
             Problem::new(404, "File not found.")
@@ -509,6 +510,10 @@ async fn project_route(
             "history" => json!(projects.history(&project, &file)?),
             "history-version" => projects.history_version(&project, &file, &query(url, "id"))?,
             "preview" => jobs.preview(&project.id),
+            "phone-preview" => json!({
+                "job": jobs.phone_preview(&project.id),
+                "address": phone_preview::suggested_address().map(|address| address.to_string()),
+            }),
             "web-publish" => deploy::state(jobs, &project)?,
             "store-upload" => stores::state(projects, &project)?,
             "device" => jobs.device_session(&project.id),
@@ -568,6 +573,15 @@ async fn project_route(
                 Some("stop") => (200, jobs.stop_preview(&project.id).await),
                 _ => return Err(Problem::new(400, "Choose a preview action.")),
             },
+            "phone-preview" => match input["action"].as_str() {
+                Some("start") => (
+                    202,
+                    jobs.start_phone_preview(project, phone_preview::address(&input)?)?,
+                ),
+                Some("reload") => (202, jobs.reload_phone_preview(&project.id)?),
+                Some("stop") => (200, jobs.stop_phone_preview(&project.id).await),
+                _ => return Err(Problem::new(400, "Choose a phone preview action.")),
+            },
             "device" => {
                 let action = required(&input, "action")?;
                 if action == "start" {
@@ -611,6 +625,7 @@ async fn project_route(
                 )?,
             ),
             "forget" => {
+                jobs.stop_phone_preview(&project.id).await;
                 jobs.stop_device(&project.id).await;
                 jobs.stop_preview(&project.id).await;
                 if jobs.busy(&project.id) {

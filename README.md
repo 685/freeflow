@@ -25,6 +25,8 @@ Freeflow checks the official stable release feed at startup and periodically whi
 
 The preview device controls resize the web viewport. Use **Run on device** in the bottom bar to launch on a connected phone, running simulator or desktop target detected by Flutter. **Run settings** accepts a Flutter flavor and Dart defines. The device panel shows logs and offers hot reload and hot restart where supported. Launching on iOS requires a Mac with Xcode and signing set up.
 
+Use **Preview on phone** in the preview toolbar to share a QR code and link on your local network. Scan it with a phone on the same network. The mobile browser reloads the web app after a successful rebuild of saved changes. The link stays the same while sharing is active. **Stop sharing** closes the link, and starting again creates a new one. If Windows blocks the connection, allow Freeflow through the firewall on your private network.
+
 ## Connect your AI
 
 Open **Agent → Agent settings** and enter your OpenAI-compatible Chat Completions base URL and model name. For a local Ollama server the default base URL is **http://127.0.0.1:11434/v1**. Use a model that supports tool calls for project access and vision for attached images. Enter an API key when your provider requires one. Freeflow stores it in your local data folder.

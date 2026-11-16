@@ -2,7 +2,7 @@ use crate::{
     archive, backends,
     files::{self, Problem, Result},
     flutter::{Flutter, Sdk},
-    preview,
+    phone_preview, preview,
     processes::{self, ProcessCommand},
     projects::{Project, Projects},
     signing,
@@ -15,11 +15,12 @@ use std::{
     ffi::OsString,
     fs,
     future::Future,
+    net::Ipv4Addr,
     path::{Path, PathBuf},
-    sync::{Arc, LazyLock, Mutex},
+    sync::{Arc, LazyLock, Mutex, Weak},
     time::SystemTime,
 };
-use tokio::sync::Notify;
+use tokio::sync::{Mutex as AsyncMutex, Notify, OwnedMutexGuard};
 use tokio_util::sync::CancellationToken;
 
 static ANSI: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"\x1b\[[0-9;]*[ -/]*[@-~]").unwrap());
@@ -131,6 +132,8 @@ impl Job {
         if self.kind == "device" {
             state.result["debugUrl"] = Value::Null;
             state.result["reloading"] = json!(false);
+        } else if self.kind == "phone-preview" {
+            state.result = json!({});
         } else if self.kind == "preview" && !state.result["url"].is_null() {
             state.result["url"] = Value::Null;
             state.result["reloading"] = json!(false);
@@ -146,8 +149,11 @@ impl Job {
     pub fn ready(&self, url: &str, epoch: u64, inspector: bool) {
         let mut state = self.state.lock().unwrap();
         state.status = "ready";
-        state.result = json!({"url":url,"epoch":epoch,"inspector":inspector,
-            "reloading":false,"compileError":null});
+        state.result["url"] = json!(url);
+        state.result["epoch"] = json!(epoch);
+        state.result["inspector"] = json!(inspector);
+        state.result["reloading"] = json!(false);
+        state.result["compileError"] = Value::Null;
     }
 
     pub fn refreshing(&self) {
@@ -212,6 +218,7 @@ pub(crate) enum Mode {
     Exclusive,
     PausePreview,
     Preview,
+    PhonePreview,
     Device,
     Sdk,
     Global,
@@ -222,6 +229,8 @@ struct Queue {
     jobs: HashMap<String, Arc<Job>>,
     order: VecDeque<String>,
     previews: HashMap<String, Arc<Job>>,
+    phone_previews: HashMap<String, Arc<Job>>,
+    flutter_builds: HashMap<String, Weak<AsyncMutex<()>>>,
     devices: HashMap<String, Arc<Job>>,
     busy: HashMap<String, String>,
     sdk: Option<Arc<Job>>,
@@ -268,6 +277,18 @@ impl Jobs {
             .as_ref()
             .and_then(|id| queue.previews.get(id))
             .cloned();
+        if let Mode::PhonePreview = mode {
+            if let Some(active) = project_id
+                .as_ref()
+                .and_then(|id| queue.phone_previews.get(id))
+                .filter(|job| !job.done.is_cancelled())
+            {
+                if active.cancel.is_cancelled() {
+                    return Err(Problem::new(409, "The phone preview is stopping."));
+                }
+                return Ok(active.view(0));
+            }
+        }
         if matches!(mode, Mode::Preview) {
             if let Some(active) = current_preview
                 .as_ref()
@@ -327,6 +348,11 @@ impl Jobs {
                     .previews
                     .insert(job.project_id.clone().unwrap(), job.clone());
             }
+            Mode::PhonePreview => {
+                queue
+                    .phone_previews
+                    .insert(job.project_id.clone().unwrap(), job.clone());
+            }
             Mode::Sdk => queue.sdk = Some(job.clone()),
             Mode::Device => {
                 queue
@@ -366,6 +392,7 @@ impl Jobs {
                     let kept: HashSet<_> = queue
                         .previews
                         .values()
+                        .chain(queue.phone_previews.values())
                         .chain(queue.devices.values())
                         .chain(queue.sdk.iter())
                         .map(|job| job.id.clone())
@@ -464,12 +491,36 @@ impl Jobs {
         sdk: &Sdk,
         args: &[&str],
     ) -> Result<()> {
+        let _build = self.flutter_build_slot(job, project).await?;
         let mut arguments = args.to_vec();
         if self.flutter.settings()?.offline {
             arguments.push("--offline");
         }
         let command = self.flutter.command(sdk, arguments)?;
         job.exec(&command, &project.root).await
+    }
+
+    pub async fn flutter_build_slot(
+        &self,
+        job: &Job,
+        project: &Project,
+    ) -> Result<OwnedMutexGuard<()>> {
+        let slot = {
+            let mut queue = self.queue.lock().unwrap();
+            queue
+                .flutter_builds
+                .retain(|_, slot| slot.strong_count() != 0);
+            let entry = queue.flutter_builds.entry(project.id.clone()).or_default();
+            entry.upgrade().unwrap_or_else(|| {
+                let slot = Arc::new(AsyncMutex::new(()));
+                *entry = Arc::downgrade(&slot);
+                slot
+            })
+        };
+        tokio::select! {
+            guard = slot.lock_owned() => Ok(guard),
+            _ = job.cancel.cancelled() => Err(Problem::new(409, "Command stopped.")),
+        }
     }
 
     pub fn scaffold(
@@ -588,6 +639,49 @@ impl Jobs {
             job.done.cancelled().await;
         }
         job.view(0)
+    }
+
+    fn phone_preview_job(&self, id: &str) -> Option<Arc<Job>> {
+        self.queue.lock().unwrap().phone_previews.get(id).cloned()
+    }
+
+    pub fn phone_preview(&self, id: &str) -> Value {
+        self.phone_preview_job(id)
+            .map_or(Value::Null, |job| job.view(u64::MAX))
+    }
+
+    pub fn start_phone_preview(
+        self: &Arc<Self>,
+        project: Project,
+        address: Ipv4Addr,
+    ) -> Result<Value> {
+        self.enqueue(
+            "phone-preview",
+            Some(project.clone()),
+            Mode::PhonePreview,
+            move |jobs, job| async move {
+                phone_preview::run(&jobs, &job, &project, address).await?;
+                Ok(json!({}))
+            },
+        )
+    }
+
+    pub fn reload_phone_preview(&self, id: &str) -> Result<Value> {
+        let job = self
+            .phone_preview_job(id)
+            .filter(|job| !job.done.is_cancelled() && !job.cancel.is_cancelled())
+            .ok_or_else(|| Problem::new(404, "Start sharing the phone preview first."))?;
+        job.reload.notify_one();
+        Ok(job.view(u64::MAX))
+    }
+
+    pub async fn stop_phone_preview(&self, id: &str) -> Value {
+        let Some(job) = self.phone_preview_job(id) else {
+            return Value::Null;
+        };
+        job.cancel.cancel();
+        job.done.cancelled().await;
+        job.view(u64::MAX)
     }
 
     pub fn analyze(self: &Arc<Self>, project: Project, kind: &str) -> Result<Value> {
@@ -762,6 +856,7 @@ impl Jobs {
         let sdk = self.flutter.require()?;
         self.pub_command(job, project, &sdk, &["pub", "get"])
             .await?;
+        let _build = self.flutter_build_slot(job, project).await?;
         let mut args = vec![OsString::from("build")];
         args.extend(flags.into_iter().map(OsString::from));
         args.push("--no-pub".into());

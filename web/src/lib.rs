@@ -4,6 +4,7 @@ mod dialogs;
 mod dom;
 mod editor;
 mod editor_assist;
+mod phone_preview;
 mod planner;
 mod preview_inspector;
 mod source_control;
@@ -115,6 +116,7 @@ pub async fn activate(project: Value) -> Result {
     if let Some(path) = path {
         load_file(&path, false).await?;
         update_preview(&project_id).await?;
+        phone_preview::refresh(&project_id).await?;
         device_panel::refresh(&project_id).await?;
     }
     Ok(())
@@ -564,6 +566,7 @@ async fn poll(tick: u32) -> Result {
     if let Ok(project) = project_id() {
         agent_panel::poll(&project).await?;
         device_panel::poll(&project).await?;
+        phone_preview::poll(&project).await?;
         update_preview(&project).await?;
         if tick.is_multiple_of(4) && current(&project) {
             refresh_tree(&project).await?;
@@ -663,6 +666,7 @@ fn register_events() {
         ui::spawn(preview_action(action));
     });
     ui::click("reload", || ui::spawn(preview_action("reload")));
+    ui::click("phone-preview", || ui::spawn(phone_preview::open()));
     ui::click("open-preview", || {
         let url = state::read(|state| string(&state.preview["result"]["url"]).to_owned());
         if !url.is_empty() {

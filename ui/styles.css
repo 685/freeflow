@@ -223,6 +223,7 @@ svg { display: block; flex-shrink: 0; }
 }
 .status-right { display: flex; align-items: center; gap: 2px; }
 #run-device.running { color: var(--success); }
+#phone-preview.running { color: var(--success); }
 .device-session { display: grid; gap: 8px; margin-bottom: 10px; }
 .device-session pre { max-height: 200px; }
 .device-targets { display: grid; gap: 12px; }
@@ -349,6 +350,11 @@ textarea.editor-input::selection { background: #8470f34d; }
 .git-feedback:empty { display: none; }
 .form { display: grid; gap: 13px; }
 .form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 12px; }
+.phone-share { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; }
+.phone-share img { background: #fff; border-radius: 5px; }
+.phone-share > div { flex: 1 1 200px; min-width: 0; }
+.phone-share p { margin: 0; }
+.phone-link { overflow-wrap: anywhere; }
 .form-field { min-width: 0; display: grid; gap: 5px; align-content: start; color: #dfdfea; font-size: 12px; }
 .form-field input, .form-field select { min-width: 0; width: 100%; min-height: 34px; }
 .form-field textarea { resize: vertical; min-height: 88px; min-width: 0; }

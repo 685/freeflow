@@ -23,6 +23,7 @@ pub fn render() {
             "test",
             "dependencies",
             "run-device",
+            "phone-preview",
         ] {
             disabled(control, !open);
         }
@@ -63,6 +64,7 @@ pub fn render() {
         inspector(state);
         crate::agent_panel::layout(state);
         crate::device_panel::badge(state);
+        crate::phone_preview::badge(state);
         editor(state);
     });
     state::change(|state| preview(state, true));
@@ -574,6 +576,7 @@ pub fn job_label(kind: &str) -> &str {
     match kind {
         "create" => "Create project",
         "preview" => "Flutter preview",
+        "phone-preview" => "Phone preview",
         "analyze" => "Analyze",
         "test" => "Tests",
         "format" => "Dart format",

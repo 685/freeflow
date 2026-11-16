@@ -41,6 +41,9 @@ pub(crate) enum View {
     Devices {
         project: String,
     },
+    PhonePreview {
+        project: String,
+    },
     AgentSettings {
         project: String,
     },
@@ -112,6 +115,12 @@ pub(crate) fn showing_devices(project: &str) -> bool {
     dialog().open()
         && MODAL
             .with_borrow(|(_, view)| matches!(view, View::Devices {project: id} if id == project))
+}
+pub(crate) fn showing_phone_preview(project: &str) -> bool {
+    dialog().open()
+        && MODAL.with_borrow(
+            |(_, view)| matches!(view, View::PhonePreview { project: id } if id == project),
+        )
 }
 fn close() {
     dialog().close();
@@ -1018,6 +1027,9 @@ fn form_data(form: &Element) -> Value {
 
 async fn submit_view(view: View, version: u64, mut input: Value) -> Result {
     match view {
+        View::PhonePreview { project } if current(&project) => {
+            crate::phone_preview::submit(&project, input).await?;
+        }
         View::WebPublish { project } if current(&project) => {
             crate::web_publish::configure(&project, version, input).await?;
         }
@@ -1107,6 +1119,9 @@ async fn submit_view(view: View, version: u64, mut input: Value) -> Result {
 
 async fn act(view: View, version: u64, action: &str, element: &Element) -> Result {
     match view {
+        View::PhonePreview { project } if current(&project) => {
+            crate::phone_preview::act(&project, version, action).await?;
+        }
         View::WebPublish { project } if current(&project) => {
             crate::web_publish::act(&project, version, action).await?;
         }

@@ -10,6 +10,7 @@ mod inspector;
 mod jobs;
 mod language;
 mod mcp;
+mod phone_preview;
 mod preview;
 mod processes;
 mod projects;
