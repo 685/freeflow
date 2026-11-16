@@ -8,8 +8,10 @@ function show(message) {
 }
 
 async function refresh() {
+  const controller = new AbortController();
+  const deadline = window.setTimeout(() => controller.abort(), 4000);
   try {
-    const response = await fetch('status.json', { signal: AbortSignal.timeout(4000) });
+    const response = await fetch('status.json', { signal: controller.signal });
     if (!response.ok) throw new Error('Preview unavailable');
     const next = await response.json();
     if (next.generation !== current) {
@@ -26,8 +28,10 @@ async function refresh() {
     frame.removeAttribute('src');
     current = null;
     show('Preview disconnected. Check that Freeflow is sharing and both devices are on the same network.');
+  } finally {
+    window.clearTimeout(deadline);
+    window.setTimeout(refresh, 1200);
   }
-  window.setTimeout(refresh, 1200);
 }
 
 refresh();
