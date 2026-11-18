@@ -501,6 +501,25 @@ fn list_for(tokens: &[Token<'_>], arg: Arg<'_>) -> Option<List> {
     })
 }
 
+fn empty_child(tokens: &[Token<'_>], arg: Arg<'_>) -> bool {
+    if arg.expression == arg.span.last && at(tokens, arg.expression) == "null" {
+        return true;
+    }
+    let mut index = arg.expression;
+    if matches!(at(tokens, index), "const" | "new") {
+        index += 1;
+    }
+    if at(tokens, index + 1) == "." && at(tokens, index + 2) == "SizedBox" {
+        index += 2;
+    }
+    at(tokens, index) == "SizedBox"
+        && at(tokens, index + 1) == "."
+        && at(tokens, index + 2) == "shrink"
+        && at(tokens, index + 3) == "("
+        && at(tokens, index + 4) == ")"
+        && index + 4 == arg.span.last
+}
+
 struct Node<'a> {
     id: String,
     kind: &'a str,
@@ -530,16 +549,41 @@ impl Node<'_> {
 fn inspect(source: &str) -> Result<(Vec<Token<'_>>, Vec<Node<'_>>)> {
     let tokens = tokenize(source)?;
     let custom: HashSet<_> = tokens
-        .windows(4)
-        .filter(|w| {
-            w[0].text == "class"
-                && w[2].text == "extends"
-                && matches!(
-                    w[3].text,
-                    "StatelessWidget" | "StatefulWidget" | "ConsumerWidget" | "HookWidget"
-                )
+        .iter()
+        .enumerate()
+        .filter_map(|(index, token)| {
+            if token.text != "class" {
+                return None;
+            }
+            let mut cursor = index + 2;
+            if at(&tokens, cursor) == "<" {
+                let mut depth = 0;
+                while cursor < tokens.len() {
+                    match at(&tokens, cursor) {
+                        "<" => depth += 1,
+                        ">" => depth -= 1,
+                        "{" | ";" => break,
+                        _ => {}
+                    }
+                    cursor += 1;
+                    if depth == 0 {
+                        break;
+                    }
+                }
+            }
+            if at(&tokens, cursor) != "extends" {
+                return None;
+            }
+            cursor += 1;
+            if at(&tokens, cursor + 1) == "." {
+                cursor += 2;
+            }
+            matches!(
+                at(&tokens, cursor),
+                "StatelessWidget" | "StatefulWidget" | "ConsumerWidget" | "HookWidget"
+            )
+            .then(|| at(&tokens, index + 1))
         })
-        .map(|w| w[1].text)
         .collect();
     let mut nodes: Vec<Node<'_>> = vec![];
     let mut parents: Vec<usize> = vec![];
@@ -554,6 +598,10 @@ fn inspect(source: &str) -> Result<(Vec<Token<'_>>, Vec<Node<'_>>)> {
             continue;
         }
         let mut open = i + 1;
+        let generic = type_end(&tokens, open, tokens.len());
+        if generic > open {
+            open = generic + 1;
+        }
         let mut constructor = "";
         if at(&tokens, open) == "." && at(&tokens, open + 2) == "(" {
             constructor = at(&tokens, open + 1);
@@ -565,11 +613,13 @@ fn inspect(source: &str) -> Result<(Vec<Token<'_>>, Vec<Node<'_>>)> {
         let Some(close) = tokens[open].close else {
             continue;
         };
-        let start = if matches!(previous, "const" | "new") {
-            i - 1
-        } else {
-            i
-        };
+        let mut start = i;
+        if previous == "." && i >= 2 {
+            start = i - 2;
+        }
+        if start > 0 && matches!(at(&tokens, start - 1), "const" | "new") {
+            start -= 1;
+        }
         if matches!(at(&tokens, close + 1), "{" | "=>")
             || (at(&tokens, close + 1) == ":"
                 && !start
@@ -688,7 +738,7 @@ fn member<'a>(
                 index,
                 items: parent.args.iter().map(|arg| arg.span).collect(),
                 list: None,
-                slot: None,
+                slot: Some(slot),
             });
         }
         if *multiple {
@@ -738,7 +788,7 @@ pub fn outline(source: &str) -> Result<Value> {
         }).collect();
         let slots: Vec<_> = node.slots().iter().filter(|(name, multiple)| {
             node.args.iter().copied().find(|arg| arg.name == Some(name))
-                .is_none_or(|arg| *multiple && list_for(&tokens, arg).is_some())
+                .is_none_or(|arg| if *multiple { list_for(&tokens, arg).is_some() } else { empty_child(&tokens, arg) })
         }).map(|(name, _)| name).collect();
         let choices: HashMap<_, _> = slots.iter().map(|name| (name, slot_choices(node, name))).collect();
         let parent = node.parent.map(|index| &nodes[index]);
@@ -1019,6 +1069,255 @@ pub fn edit_theme(source: &str, input: &Value) -> Result<String> {
     Ok(result)
 }
 
+pub fn snippet(source: &str, id: &str) -> Result<Value> {
+    let (tokens, nodes) = inspect(source)?;
+    let node = nodes
+        .iter()
+        .find(|node| node.id == id)
+        .ok_or_else(|| Problem::new(409, "Select the widget again after the source refreshes."))?;
+    Ok(
+        json!({"code": &source[tokens[node.start].start..tokens[node.close].end], "type": node.kind}),
+    )
+}
+
+fn pasted_widget(code: &str) -> Result<(&str, &str)> {
+    let invalid = || {
+        Problem::new(
+            422,
+            "Copy a complete Dart widget constructor before pasting.",
+        )
+    };
+    let tokens = tokenize(code)?;
+    let mut index = usize::from(matches!(at(&tokens, 0), "const" | "new"));
+    let identifier = |value: &str| {
+        !value.is_empty()
+            && value.bytes().enumerate().all(|(i, byte)| {
+                byte.is_ascii_alphabetic()
+                    || matches!(byte, b'_' | b'$')
+                    || i > 0 && byte.is_ascii_digit()
+            })
+    };
+    let mut kind = "";
+    loop {
+        let name = at(&tokens, index);
+        if !identifier(name) {
+            return Err(invalid());
+        }
+        if name.starts_with(char::is_uppercase) {
+            kind = name;
+        }
+        index += 1;
+        let generic = type_end(&tokens, index, tokens.len());
+        if generic > index {
+            index = generic + 1;
+        }
+        if at(&tokens, index) != "." {
+            break;
+        }
+        index += 1;
+    }
+    if kind.is_empty()
+        || at(&tokens, index) != "("
+        || tokens[index].close != tokens.len().checked_sub(1)
+        || tokens
+            .iter()
+            .any(|token| matches!(token.text, "(" | "[" | "{") && token.close.is_none())
+    {
+        return Err(invalid());
+    }
+    Ok((&code[tokens[0].start..tokens.last().unwrap().end], kind))
+}
+
+fn insert_widget(
+    source: &str,
+    tokens: &[Token<'_>],
+    node: &Node<'_>,
+    parent: Option<&Node<'_>>,
+    slot: &str,
+    side: &str,
+    code: &str,
+) -> Result<String> {
+    let (code, kind) = pasted_widget(code)?;
+    let membership = member(node, parent, tokens);
+    let has_slot = node.slots().iter().any(|(name, multiple)| {
+        node.args
+            .iter()
+            .copied()
+            .find(|arg| arg.name == Some(name))
+            .is_none_or(|arg| {
+                if *multiple {
+                    list_for(tokens, arg).is_some()
+                } else {
+                    empty_child(tokens, arg)
+                }
+            })
+    });
+    if matches!(side, "before" | "after") || side.is_empty() && slot.is_empty() && !has_slot {
+        let current = membership
+            .filter(|entry| entry.list.is_some())
+            .ok_or_else(|| {
+                Problem::new(
+                    422,
+                    "Select a children list or an empty child slot for this widget.",
+                )
+            })?;
+        let item = current.items[current.index];
+        if parent.is_some_and(|parent| parent.kind == "NavigationBar")
+            && current.slot == Some("destinations")
+            && kind != "NavigationDestination"
+        {
+            return Err(Problem::new(
+                422,
+                "NavigationBar.destinations requires NavigationDestination widgets.",
+            ));
+        }
+        return Ok(if side == "before" {
+            replace(
+                source,
+                tokens[item.first].start,
+                tokens[item.first].start,
+                &format!("{code}, "),
+            )
+        } else {
+            append(source, tokens, current.list.unwrap(), Some(item), code)
+        });
+    }
+    if !matches!(side, "" | "inside") {
+        return Err(Problem::new(
+            400,
+            "Choose before, after or inside for the destination.",
+        ));
+    }
+    let (slot, multiple) = node
+        .slots()
+        .iter()
+        .find(|(name, _)| name == slot)
+        .or_else(|| {
+            slot.is_empty()
+                .then(|| {
+                    node.slots().iter().find(|(name, multiple)| {
+                        node.args
+                            .iter()
+                            .copied()
+                            .find(|arg| arg.name == Some(name))
+                            .is_none_or(|arg| {
+                                if *multiple {
+                                    list_for(tokens, arg).is_some()
+                                } else {
+                                    empty_child(tokens, arg)
+                                }
+                            })
+                    })
+                })
+                .flatten()
+        })
+        .ok_or_else(|| {
+            Problem::new(
+                422,
+                "Select a children list or an empty child slot for this widget.",
+            )
+        })?;
+    if node.kind == "Scaffold" && slot == "appBar" && !matches!(kind, "AppBar" | "PreferredSize") {
+        return Err(Problem::new(
+            422,
+            "Scaffold.appBar requires an AppBar or PreferredSize widget.",
+        ));
+    }
+    if node.kind == "NavigationBar" && slot == "destinations" && kind != "NavigationDestination" {
+        return Err(Problem::new(
+            422,
+            "NavigationBar.destinations requires NavigationDestination widgets.",
+        ));
+    }
+    let arg = node.args.iter().copied().find(|arg| arg.name == Some(slot));
+    match arg {
+        Some(arg) if !*multiple && empty_child(tokens, arg) => Ok(replace(
+            source,
+            tokens[arg.expression].start,
+            tokens[arg.span.last].end,
+            code,
+        )),
+        None => Ok(append(
+            source,
+            tokens,
+            node.open,
+            node.args.last().map(|arg| arg.span),
+            &if *multiple {
+                format!("{slot}: [{code}]")
+            } else {
+                format!("{slot}: {code}")
+            },
+        )),
+        Some(arg) if *multiple => {
+            let list = list_for(tokens, arg)
+                .ok_or_else(|| Problem::new(422, "This children expression needs a Dart edit."))?;
+            Ok(append(
+                source,
+                tokens,
+                list.open,
+                list.items.last().copied(),
+                code,
+            ))
+        }
+        _ => Err(Problem::new(
+            422,
+            "This child slot is already filled. Select an empty slot or a children list.",
+        )),
+    }
+}
+
+fn remove_range(
+    node: &Node<'_>,
+    parent: Option<&Node<'_>>,
+    tokens: &[Token<'_>],
+) -> Result<(usize, usize, String)> {
+    let current = member(node, parent, tokens)
+        .ok_or_else(|| Problem::new(422, "That change needs to be made in the code editor."))?;
+    let span = current.items[current.index];
+    // Required single-child constructors must remain valid after a cut or move.
+    if current.list.is_none()
+        && matches!(
+            (parent.map(|node| node.kind), current.slot),
+            (
+                Some(
+                    "Expanded"
+                        | "Flexible"
+                        | "Positioned"
+                        | "SafeArea"
+                        | "ElevatedButton"
+                        | "FilledButton"
+                        | "OutlinedButton"
+                        | "TextButton"
+                ),
+                Some("child")
+            ) | (Some("IconButton" | "NavigationDestination"), Some("icon"))
+        )
+    {
+        let parent = parent.unwrap();
+        let index = parent.start + usize::from(matches!(at(tokens, parent.start), "const" | "new"));
+        let prefix = if at(tokens, index + 1) == "." {
+            format!("{}.", at(tokens, index))
+        } else {
+            String::new()
+        };
+        return Ok((
+            tokens[node.start].start,
+            tokens[node.close].end,
+            format!("const {prefix}SizedBox.shrink()"),
+        ));
+    }
+    let start = if span.comma.is_none() && current.index > 0 {
+        tokens[current.items[current.index - 1].comma.unwrap_or(span.first)].start
+    } else {
+        tokens[span.first].start
+    };
+    Ok((
+        start,
+        tokens[span.comma.unwrap_or(span.last)].end,
+        String::new(),
+    ))
+}
+
 pub fn edit(source: &str, command: &Value) -> Result<String> {
     if !command.is_object() {
         return Err(Problem::new(400, "Choose a visual edit."));
@@ -1040,6 +1339,24 @@ pub fn edit(source: &str, command: &Value) -> Result<String> {
         )
     };
     match field("operation") {
+        "paste" => insert_widget(
+            source,
+            &tokens,
+            node,
+            parent,
+            field("slot"),
+            field("side"),
+            field("code"),
+        ),
+        "duplicate" => insert_widget(
+            source,
+            &tokens,
+            node,
+            parent,
+            "",
+            "after",
+            &source[tokens[node.start].start..tokens[node.close].end],
+        ),
         "property" => {
             let item = node
                 .spec
@@ -1125,6 +1442,14 @@ pub fn edit(source: &str, command: &Value) -> Result<String> {
                     format!("{slot}: {value}")
                 }));
             };
+            if !*multiple && empty_child(&tokens, arg) {
+                return Ok(replace(
+                    source,
+                    tokens[arg.expression].start,
+                    tokens[arg.span.last].end,
+                    value,
+                ));
+            }
             let list = multiple
                 .then(|| list_for(&tokens, arg))
                 .flatten()
@@ -1172,22 +1497,45 @@ pub fn edit(source: &str, command: &Value) -> Result<String> {
             let unsupported =
                 || Problem::new(422, "That change needs to be made in the code editor.");
             let current = member(node, parent, &tokens).ok_or_else(unsupported)?;
-            let span = current.items[current.index];
             if operation == "remove" {
-                let start = if span.comma.is_none() && current.index > 0 {
-                    tokens[current.items[current.index - 1].comma.unwrap_or(span.first)].start
-                } else {
-                    tokens[span.first].start
-                };
-                return Ok(replace(
-                    source,
-                    start,
-                    tokens[span.comma.unwrap_or(span.last)].end,
-                    "",
+                let (start, end, value) = remove_range(node, parent, &tokens)?;
+                return Ok(replace(source, start, end, &value));
+            }
+            if operation != "move" {
+                return Err(unsupported());
+            }
+            let target = nodes
+                .iter()
+                .find(|node| node.id == field("target"))
+                .ok_or_else(unsupported)?;
+            if node.start <= target.start && target.close <= node.close {
+                return Err(Problem::new(
+                    422,
+                    "A widget cannot be moved into itself or one of its children.",
                 ));
             }
-            if operation != "move" || current.list.is_none() {
-                return Err(unsupported());
+            let target_parent = target.parent.map(|index| &nodes[index]);
+            let target_member = member(target, target_parent, &tokens);
+            if current.list.is_none()
+                || target_member
+                    .as_ref()
+                    .is_none_or(|other| other.list != current.list)
+                || !matches!(field("side"), "before" | "after")
+            {
+                let code = &source[tokens[node.start].start..tokens[node.close].end];
+                let (start, end, value) = remove_range(node, parent, &tokens)?;
+                let output = replace(source, start, end, &value);
+                let offset = tokens[target.start].start;
+                let offset = if end <= offset {
+                    offset - (end - start) + value.len()
+                } else {
+                    offset
+                };
+                let target_id = output[..offset].encode_utf16().count().to_string();
+                return edit(
+                    &output,
+                    &json!({"id":target_id,"operation":"paste","side":field("side"),"slot":field("slot"),"code":code}),
+                );
             }
             let reorder = || Problem::new(422, "Reorder widgets within the same children list.");
             let other = nodes

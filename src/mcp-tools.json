@@ -159,7 +159,9 @@
                 "add",
                 "wrap",
                 "remove",
-                "move"
+                "move",
+                "paste",
+                "duplicate"
               ]
             },
             "name": {
@@ -179,7 +181,7 @@
             },
             "slot": {
               "type": "string",
-              "description": "Available Dart child slot for add."
+              "description": "Available Dart child slot for add, paste or moving inside a target."
             },
             "widget": {
               "type": "string",
@@ -187,12 +189,17 @@
             },
             "target": {
               "type": "string",
-              "description": "Sibling widget ID for move."
+              "description": "Destination widget ID for move, in the same Dart file."
+            },
+            "code": {
+              "type": "string",
+              "description": "Complete Dart widget constructor for paste. Preserve imports and referenced values in the destination file."
             },
             "side": {
               "enum": [
                 "before",
-                "after"
+                "after",
+                "inside"
               ]
             }
           }

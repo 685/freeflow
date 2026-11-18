@@ -65,7 +65,7 @@ pub fn show_tree(show: bool) {
     });
 }
 
-pub fn select_rendered(id: &str) {
+pub async fn select_rendered(id: &str) -> Result {
     let context = state::change(|state| {
         let node = state
             .rendered
@@ -87,14 +87,9 @@ pub fn select_rendered(id: &str) {
         ))
     });
     if let Some((project, generation, request, node)) = context {
-        dom::spawn(pick(
-            project,
-            generation,
-            request,
-            json!([node]),
-            id.to_owned(),
-        ));
+        pick(project, generation, request, json!([node]), id.to_owned()).await?;
     }
+    Ok(())
 }
 
 fn update_tree(message: &Value) {

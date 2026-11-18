@@ -253,6 +253,21 @@ pub fn write_widgets(projects: &Projects, project: &Project, input: &Value) -> R
     Ok(json!(file))
 }
 
+pub fn widget_snippet(projects: &Projects, project: &Project, input: &Value) -> Result<Value> {
+    let path = required(input, "path")?;
+    if !path.ends_with(".dart") {
+        return Err(Problem::new(400, "Select a Dart file."));
+    }
+    let source = projects.file(project, path)?;
+    if source.revision.as_deref() != revision(input)? {
+        return Err(Problem::new(
+            409,
+            "The source changed. Refresh the widget before copying it.",
+        ));
+    }
+    visual::snippet(&source.content, required(input, "id")?)
+}
+
 fn quote(value: &str) -> String {
     if cfg!(windows) {
         format!("'{}'", value.replace('\'', "''"))
@@ -552,6 +567,7 @@ async fn project_route(
         let input = body(request).await?;
         let (code, value) = match part {
             "widgets" => (200, write_widgets(projects, &project, &input)?),
+            "widget-snippet" => (200, widget_snippet(projects, &project, &input)?),
             "theme" => {
                 let path = required(&input, "path")?;
                 if !path.ends_with(".dart") {

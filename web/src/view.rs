@@ -224,7 +224,7 @@ fn widget_rows(
             "data-widget"
         };
         output.push_str(&format!(r#"<button type="button" class="tree-row{}" {attribute}="{}" style="--depth:{}" draggable="{}" aria-pressed="{selected}" title="{title}">{chevron}<span class="tree-symbol">{}</span><span class="tree-label ellipsis">{}</span>{hint}</button>"#,
-            if selected { " selected" } else { "" }, h(id), depth.min(10), !rendered && node["movable"] == true, icon(widget_icon(kind), 16), h(kind)));
+            if selected { " selected" } else { "" }, h(id), depth.min(10), !rendered && node["removable"] == true, icon(widget_icon(kind), 16), h(kind)));
         if children && !collapsed {
             widget_rows(state, groups, id, depth + 1, rendered, output);
         }
@@ -414,6 +414,7 @@ pub fn inspector(state: &State) {
         content.push_str(&format!(r#"<button type="button" class="icon-button" data-widget-action="remove" aria-label="Remove widget" title="Remove widget">{}</button>"#, icon("trash", 16)));
     }
     content.push_str("</div></div>");
+    content.push_str(&crate::widget_clipboard::controls(node, false));
     if rendered {
         content.push_str(r#"<p class="inspect-note">Edits apply to every instance created by this Dart constructor.</p>"#);
     }

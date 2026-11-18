@@ -13,6 +13,7 @@ mod store_upload;
 mod theme;
 mod view;
 mod web_publish;
+mod widget_clipboard;
 
 use crate::{
     dom::{
@@ -345,6 +346,11 @@ pub async fn save_draft() -> Result {
 }
 
 pub async fn visual_edit(command: Value) -> Result {
+    let (project, path, revision) = visual_context()?;
+    visual_edit_at(project, path, revision, command).await
+}
+
+pub fn visual_context() -> Result<(String, String, Value)> {
     let project = project_id()?;
     let (path, revision, drafted) = state::read(|state| {
         let path = string(&state.visual["path"]).to_owned();
@@ -352,9 +358,23 @@ pub async fn visual_edit(command: Value) -> Result {
         (path, state.visual["revision"].clone(), drafted)
     });
     if path.is_empty() {
-        return Ok(());
+        return Err(Error::new("Select a Dart widget first."));
     }
     if drafted {
+        return Err(Error::new(
+            "Save the code draft before editing its widgets.",
+        ));
+    }
+    Ok((project, path, revision))
+}
+
+pub async fn visual_edit_at(
+    project: String,
+    path: String,
+    revision: Value,
+    command: Value,
+) -> Result {
+    if state::read(|state| state.drafts.contains_key(&(project.clone(), path.clone()))) {
         return Err(Error::new(
             "Save the code draft before editing its widgets.",
         ));
@@ -367,7 +387,7 @@ pub async fn visual_edit(command: Value) -> Result {
     .await?;
     if state::read(|state| state.project_id() == project && state.file == path) {
         state::change(|state| {
-            if state.mode.shows_code() {
+            if state.mode.shows_code() && !state.drafts.contains_key(&state.draft_key(&path)) {
                 editor::set(string(&saved["content"]), true, true);
             }
             state.source = saved;
@@ -861,13 +881,18 @@ fn tree_events() {
         } else if let Some(file) = button.get_attribute("data-file") {
             ui::spawn(select(file, code_mode()));
         } else if let Some(widget) = button.get_attribute("data-rendered-widget") {
-            preview_inspector::select_rendered(&widget);
+            ui::spawn(async move {
+                preview_inspector::select_rendered(&widget).await?;
+                widget_clipboard::focus();
+                Ok(())
+            });
         } else if let Some(widget) = button.get_attribute("data-widget") {
             state::change(|state| {
                 state.widget = widget;
                 view::explorer(state);
                 view::inspector(state);
             });
+            widget_clipboard::focus();
         }
     });
     ui::listen(&tree, "dragstart", |event| {
@@ -882,7 +907,7 @@ fn tree_events() {
         state::change(|state| {
             let node = state
                 .node(&widget)
-                .filter(|node| node["movable"] == true)
+                .filter(|node| node["removable"] == true)
                 .cloned();
             if node.is_some() {
                 if let Some(data) = event.data_transfer() {
@@ -928,34 +953,40 @@ fn tree_events() {
 }
 
 fn clear_drop() {
-    for row in all(".drop-before,.drop-after") {
+    for row in all(".drop-before,.drop-after,.drop-inside") {
         ui::toggle(&row, "drop-before", false);
         ui::toggle(&row, "drop-after", false);
+        ui::toggle(&row, "drop-inside", false);
     }
 }
 
 fn drop_target(event: &DragEvent) -> Option<(Element, String, &'static str)> {
     let button = closest(event, "[data-widget]")?;
     let widget = button.get_attribute("data-widget")?;
-    let allowed = state::read(|state| {
+    let side = state::read(|state| {
         let Some((from, to)) = state.dragged.as_ref().zip(state.node(&widget)) else {
-            return false;
+            return None;
         };
-        to["movable"] == true
-            && from["id"] != to["id"]
-            && from["parent"] == to["parent"]
-            && from["listSlot"] == to["listSlot"]
+        let mut ancestor = Some(to);
+        while let Some(node) = ancestor {
+            if node["id"] == from["id"] {
+                return None;
+            }
+            ancestor = node["parent"].as_str().and_then(|id| state.node(id));
+        }
+        let rect = button.get_bounding_client_rect();
+        let position = (f64::from(event.client_y()) - rect.top()) / rect.height();
+        if !items(&to["slots"]).is_empty()
+            && (to["movable"] != true || (0.25..=0.75).contains(&position))
+        {
+            Some("inside")
+        } else if to["movable"] == true {
+            Some(if position < 0.5 { "before" } else { "after" })
+        } else {
+            None
+        }
     });
-    if !allowed {
-        return None;
-    }
-    let rect = button.get_bounding_client_rect();
-    let side = if f64::from(event.client_y()) < rect.top() + rect.height() / 2.0 {
-        "before"
-    } else {
-        "after"
-    };
-    Some((button, widget, side))
+    Some((button, widget, side?))
 }
 
 fn inspector_events() {
@@ -1060,6 +1091,7 @@ fn start() -> std::result::Result<(), JsValue> {
     dialogs::initialize();
     register_events();
     preview_inspector::initialize();
+    widget_clipboard::initialize();
     agent_panel::initialize();
     ui::click("run-device", || ui::spawn(device_panel::open()));
     planner::initialize();

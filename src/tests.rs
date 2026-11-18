@@ -186,6 +186,156 @@ fn visual_edits_preserve_dart_expressions_and_siblings() {
 }
 
 #[test]
+fn widget_clipboard_preserves_callbacks_comments_and_import_prefixes() {
+    let source = "// 🎯\nWidget build() => m.Column(children: [m.TextButton(onPressed: () { /* keep */ setState(() => count++); }, child: const m.Text('Run $count')), const m.Text('Last')]);";
+    let tree = visual::outline(source).unwrap();
+    let button = &tree["nodes"][1];
+    let snippet = visual::snippet(source, button["id"].as_str().unwrap()).unwrap();
+    assert_eq!(
+        snippet["code"],
+        "m.TextButton(onPressed: () { /* keep */ setState(() => count++); }, child: const m.Text('Run $count'))"
+    );
+    let duplicated =
+        visual::edit(source, &json!({"id":button["id"],"operation":"duplicate"})).unwrap();
+    assert_eq!(
+        duplicated
+            .matches(snippet["code"].as_str().unwrap())
+            .count(),
+        2
+    );
+    assert!(duplicated.ends_with("const m.Text('Last')]);"));
+    let container = "Widget build() => Container();";
+    let root = &visual::outline(container).unwrap()["nodes"][0];
+    let pasted = visual::edit(
+        container,
+        &json!({"id":root["id"],"operation":"paste","code":snippet["code"]}),
+    )
+    .unwrap();
+    assert!(pasted.contains("Container(child: m.TextButton("));
+    assert!(pasted.contains("/* keep */ setState(() => count++);"));
+    for invalid in [
+        "Text('x'); runSomething()",
+        "Text('x'), Text('y')",
+        "Text('unterminated)",
+        "Text([)]",
+        "makeWidget()",
+    ] {
+        assert!(
+            visual::edit(
+                container,
+                &json!({"id":root["id"],"operation":"paste","code":invalid})
+            )
+            .is_err(),
+            "{invalid}"
+        );
+    }
+    let generic = "Widget build() => Column(children: [const m.ValueTile<String>(value: 'a')]);\nclass ValueTile<T> extends StatelessWidget {}";
+    let generic_tree = visual::outline(generic).unwrap();
+    assert_eq!(
+        visual::snippet(generic, generic_tree["nodes"][1]["id"].as_str().unwrap()).unwrap()["code"],
+        "const m.ValueTile<String>(value: 'a')"
+    );
+}
+
+#[test]
+fn widget_moves_cross_parents_and_leave_required_children_valid() {
+    let source = "// 🎯\nWidget build() => Row(children: [Column(children: [Text('a'), Text('b')]), Column(children: [Text('c')]), Expanded(child: Text('required'))]);";
+    let tree = visual::outline(source).unwrap();
+    let nodes = tree["nodes"].as_array().unwrap();
+    let find = |label: &str| nodes.iter().find(|node| node["label"] == label).unwrap();
+    let columns: Vec<_> = nodes
+        .iter()
+        .filter(|node| node["type"] == "Column")
+        .collect();
+    for (from, to, side) in [
+        (find("a"), columns[1], "inside"),
+        (find("c"), find("a"), "before"),
+        (find("required"), columns[0], "inside"),
+    ] {
+        let moved = visual::edit(
+            source,
+            &json!({"id":from["id"],"operation":"move","target":to["id"],"side":side}),
+        )
+        .unwrap();
+        assert_eq!(
+            moved
+                .matches(
+                    from["label"]
+                        .as_str()
+                        .map(|label| format!("Text('{label}')"))
+                        .unwrap()
+                        .as_str()
+                )
+                .count(),
+            1
+        );
+        if from["label"] == "required" {
+            assert!(moved.contains("Expanded(child: const SizedBox.shrink())"));
+        }
+    }
+    assert!(visual::edit(source, &json!({"id":columns[0]["id"],"operation":"move","target":find("a")["id"],"side":"after"})).is_err());
+    let required = "Widget build() => m.Expanded(child: const m.Text('cut'));";
+    let tree = visual::outline(required).unwrap();
+    let cut = visual::edit(
+        required,
+        &json!({"id":tree["nodes"][1]["id"],"operation":"remove"}),
+    )
+    .unwrap();
+    assert_eq!(
+        cut,
+        "Widget build() => m.Expanded(child: const m.SizedBox.shrink());"
+    );
+    let tree = visual::outline(&cut).unwrap();
+    assert_eq!(tree["nodes"][0]["slots"], json!(["child"]));
+    let pasted = visual::edit(
+        &cut,
+        &json!({"id":tree["nodes"][0]["id"],"operation":"paste","code":"const m.Text('back')"}),
+    )
+    .unwrap();
+    assert_eq!(
+        pasted,
+        "Widget build() => m.Expanded(child: const m.Text('back'));"
+    );
+}
+
+#[test]
+fn widget_clipboard_checks_revisions_and_failed_moves_are_atomic() {
+    let (_home, projects, project) = fixture();
+    let source =
+        "Widget build() => Row(children: [Text('copy'), Container(child: Text('filled'))]);";
+    let path = "lib/main.dart";
+    fs::write(project.root.join(path), source).unwrap();
+    let outline = server::read_widgets(&projects, &project, path).unwrap();
+    let input = json!({"path":path,"revision":outline["revision"],"id":outline["nodes"][1]["id"]});
+    assert_eq!(
+        server::widget_snippet(&projects, &project, &input).unwrap()["code"],
+        "Text('copy')"
+    );
+    let blocked = server::write_widgets(&projects, &project, &json!({"path":path,"revision":outline["revision"],"command":{
+        "id":outline["nodes"][1]["id"],"operation":"move","target":outline["nodes"][2]["id"],"side":"inside"
+    }})).unwrap_err();
+    assert_eq!(blocked.status.as_u16(), 422);
+    assert_eq!(fs::read_to_string(project.root.join(path)).unwrap(), source);
+    fs::write(project.root.join(path), format!("// changed\n{source}")).unwrap();
+    assert_eq!(
+        server::widget_snippet(&projects, &project, &input)
+            .unwrap_err()
+            .status
+            .as_u16(),
+        409
+    );
+    let stale = server::write_widgets(
+        &projects,
+        &project,
+        &json!({"path":path,"revision":outline["revision"],"command":{
+            "id":outline["nodes"][1]["id"],"operation":"remove"
+        }}),
+    )
+    .unwrap_err();
+    assert_eq!(stale.status.as_u16(), 409);
+}
+
+#[test]
 fn visual_conditional_values_keep_conditions_comments_and_other_branches() {
     let source = r#"Widget build() => Text(
       enabled ? (count > 2 ? 'ready' : /* keep */ 'waiting') : userLabel,

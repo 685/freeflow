@@ -149,6 +149,11 @@ svg { display: block; flex-shrink: 0; }
 .tree-row .tree-label { flex: 1; min-width: 0; }
 .tree-row .tree-hint { font-size: 10px; color: var(--subtle); min-width: 0; max-width: 55px; }
 .tree-row.drop-before { border-top: 1px solid var(--accent); }
+.tree-row.drop-inside { outline: 1px solid var(--accent); outline-offset: -2px; }
+.widget-clipboard { display: flex; flex-wrap: wrap; gap: 4px; padding: 10px 14px; border-bottom: 1px solid var(--border); }
+.widget-menu { position: fixed; z-index: 100; min-width: 210px; padding: 5px; background: var(--panel); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 8px 30px #0005; }
+.widget-menu button { display: flex; justify-content: space-between; width: 100%; gap: 20px; }
+.widget-menu button span { color: var(--muted); font-size: 11px; }
 .tree-row.drop-after { border-bottom: 1px solid var(--accent); }
 .tree-row[draggable="true"] { cursor: grab; }
 .tree-empty, .inspector-empty { color: var(--muted); line-height: 1.55; padding: 12px 10px; }
