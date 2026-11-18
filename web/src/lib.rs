@@ -245,6 +245,7 @@ pub async fn select(file: String, mode: Mode) -> Result {
                 state.visual = Value::Null;
                 state.widget.clear();
                 state.collapsed.clear();
+                state.rendered.selected.clear();
             }
             state.file = file.clone();
             if file.ends_with(".dart") {
@@ -568,6 +569,7 @@ async fn poll(tick: u32) -> Result {
         device_panel::poll(&project).await?;
         phone_preview::poll(&project).await?;
         update_preview(&project).await?;
+        state::read(preview_inspector::request_tree);
         if tick.is_multiple_of(4) && current(&project) {
             refresh_tree(&project).await?;
             let (file, revision, plan, loaded) = state::read(|state| {
@@ -785,9 +787,13 @@ fn register_events() {
             state::change(|state| {
                 state.widgets = widgets;
                 view::explorer(state);
+                view::inspector(state);
+                preview_inspector::request_tree(state);
             })
         });
     }
+    ui::click("source-widgets", || preview_inspector::show_tree(false));
+    ui::click("rendered-widgets", || preview_inspector::show_tree(true));
     ui::listen(&id("source-select"), "change", |event| {
         if let Some(element) = target(&event) {
             let mode = state::read(|state| {
@@ -830,8 +836,13 @@ fn tree_events() {
             closest(&event, "[data-collapse]").and_then(|node| node.get_attribute("data-collapse"))
         {
             state::change(|state| {
-                if !state.collapsed.remove(&node) {
-                    state.collapsed.insert(node);
+                let collapsed = if state.showing_rendered_widgets() {
+                    &mut state.rendered.collapsed
+                } else {
+                    &mut state.collapsed
+                };
+                if !collapsed.remove(&node) {
+                    collapsed.insert(node);
                 }
                 view::explorer(state);
             });
@@ -849,6 +860,8 @@ fn tree_events() {
             });
         } else if let Some(file) = button.get_attribute("data-file") {
             ui::spawn(select(file, code_mode()));
+        } else if let Some(widget) = button.get_attribute("data-rendered-widget") {
+            preview_inspector::select_rendered(&widget);
         } else if let Some(widget) = button.get_attribute("data-widget") {
             state::change(|state| {
                 state.widget = widget;
@@ -975,9 +988,14 @@ fn inspector_events() {
             _ => json!(raw),
         };
         let widget = state::read(|state| state.widget.clone());
-        ui::spawn(visual_edit(
-            json!({"id":widget,"operation":"property","name":property,"value":value}),
-        ));
+        let mut command = json!({"id":widget,"operation":"property","name":property,"value":value});
+        if let Some(branch) = input
+            .get_attribute("data-branch")
+            .filter(|branch| !branch.is_empty())
+        {
+            command["branch"] = json!(branch);
+        }
+        ui::spawn(visual_edit(command));
     });
     ui::listen(&panel, "click", |event| {
         let Some(button) = closest(&event, "button") else {

@@ -46,6 +46,10 @@
         <button type="button" id="files-tab" class="explorer-tab" data-explorer="files"><span data-icon="folder"></span>Files</button>
       </div>
       <div class="explorer-content">
+        <div class="tree-mode" id="tree-mode" role="group" aria-label="Widget tree view" hidden>
+          <button type="button" class="mode active" id="source-widgets" aria-pressed="true">Source</button>
+          <button type="button" class="mode" id="rendered-widgets" aria-pressed="false">Rendered</button>
+        </div>
         <div class="source-select" id="source-select-wrap" hidden>
           <span data-icon="file-code"></span>
           <select id="source-select" aria-label="Dart source file"></select>
@@ -98,6 +102,7 @@
           <div class="canvas-content" id="canvas-content">
             <div class="device-frame phone" id="device-frame">
               <iframe id="preview-frame" title="Live Flutter app preview" sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-downloads" referrerpolicy="no-referrer" hidden></iframe>
+              <div id="widget-highlight" aria-hidden="true" hidden></div>
               <div class="preview-empty" id="preview-empty"></div>
             </div>
           </div>

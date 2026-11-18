@@ -97,7 +97,7 @@
   },
   {
     "name": "inspect_widgets",
-    "description": "Read the supported visual widget tree and literal properties from a Dart file.",
+    "description": "Read supported widget constructors, properties and editable conditional branch values from a Dart file.",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -165,6 +165,10 @@
             "name": {
               "type": "string",
               "description": "Property name for a property edit."
+            },
+            "branch": {
+              "type": "string",
+              "description": "Optional path to an editable conditional value, such as then or else/then. Read the matching conditional from inspect_widgets."
             },
             "value": {
               "type": [

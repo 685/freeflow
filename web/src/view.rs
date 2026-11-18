@@ -88,7 +88,24 @@ pub fn explorer(state: &State) {
         toggle(&tab, "active", active);
         attr(&tab, "aria-pressed", if active { "true" } else { "false" });
     }
-    hidden("source-select-wrap", !open || !state.widgets);
+    let rendered = state.showing_rendered_widgets();
+    hidden(
+        "tree-mode",
+        !open || !state.widgets || !state.mode.shows_preview(),
+    );
+    for (name, active) in [
+        ("source-widgets", !rendered),
+        ("rendered-widgets", rendered),
+    ] {
+        let button = id(name);
+        toggle(&button, "active", active);
+        attr(
+            &button,
+            "aria-pressed",
+            if active { "true" } else { "false" },
+        );
+    }
+    hidden("source-select-wrap", !open || !state.widgets || rendered);
     hidden("file-actions", !open || state.widgets);
     if !open {
         html(
@@ -100,20 +117,31 @@ pub fn explorer(state: &State) {
     let mut output = String::new();
     let mut groups: HashMap<&str, Vec<&Value>> = HashMap::new();
     if state.widgets {
-        let options: String = state
-            .tree
-            .iter()
-            .filter(|entry| entry["type"] == "file")
-            .map(|entry| string(&entry["path"]))
-            .filter(|path| path.ends_with(".dart"))
-            .map(|path| option(path, &state.last_dart))
-            .collect();
-        html("source-select", options);
-        let nodes = items(&state.visual["nodes"]);
+        let nodes = if rendered {
+            &state.rendered.nodes
+        } else {
+            let options: String = state
+                .tree
+                .iter()
+                .filter(|entry| entry["type"] == "file")
+                .map(|entry| string(&entry["path"]))
+                .filter(|path| path.ends_with(".dart"))
+                .map(|path| option(path, &state.last_dart))
+                .collect();
+            html("source-select", options);
+            items(&state.visual["nodes"])
+        };
         if nodes.is_empty() {
+            let hint = if !rendered {
+                "Select a Dart file with Flutter widget constructors."
+            } else if state.inspect_ready {
+                "Waiting for project widgets to render…"
+            } else {
+                "Run a compatible Flutter debug preview to see rendered widgets."
+            };
             html(
                 "explorer-tree",
-                r#"<p class="tree-empty">Select a Dart file with Flutter widget constructors.</p>"#,
+                format!(r#"<p class="tree-empty">{hint}</p>"#),
             );
             return;
         }
@@ -123,7 +151,10 @@ pub fn explorer(state: &State) {
                 .or_default()
                 .push(node);
         }
-        widget_rows(state, &groups, "", 0, &mut output);
+        widget_rows(state, &groups, "", 0, rendered, &mut output);
+        if rendered && state.rendered.truncated {
+            output.push_str(r#"<p class="tree-empty">Showing part of this widget tree.</p>"#);
+        }
     } else {
         for entry in &state.tree {
             let path = string(&entry["path"]);
@@ -140,6 +171,7 @@ fn widget_rows(
     groups: &HashMap<&str, Vec<&Value>>,
     parent: &str,
     depth: u32,
+    rendered: bool,
     output: &mut String,
 ) {
     if depth > 100 {
@@ -148,8 +180,16 @@ fn widget_rows(
     for node in groups.get(parent).into_iter().flatten() {
         let id = string(&node["id"]);
         let kind = string(&node["type"]);
-        let selected = state.widget == id;
-        let collapsed = state.collapsed.contains(id);
+        let selected = if rendered {
+            state.rendered.selected == id
+        } else {
+            state.widget == id
+        };
+        let collapsed = if rendered {
+            state.rendered.collapsed.contains(id)
+        } else {
+            state.collapsed.contains(id)
+        };
         let children = groups.contains_key(id);
         let label = display(&node["label"])
             .split_whitespace()
@@ -178,10 +218,15 @@ fn widget_rows(
         } else {
             r#"<span class="chevron"></span>"#.into()
         };
-        output.push_str(&format!(r#"<button type="button" class="tree-row{}" data-widget="{}" style="--depth:{}" draggable="{}" aria-pressed="{selected}" title="{title}">{chevron}<span class="tree-symbol">{}</span><span class="tree-label ellipsis">{}</span>{hint}</button>"#,
-            if selected { " selected" } else { "" }, h(id), depth.min(10), node["movable"] == true, icon(widget_icon(kind), 16), h(kind)));
+        let attribute = if rendered {
+            "data-rendered-widget"
+        } else {
+            "data-widget"
+        };
+        output.push_str(&format!(r#"<button type="button" class="tree-row{}" {attribute}="{}" style="--depth:{}" draggable="{}" aria-pressed="{selected}" title="{title}">{chevron}<span class="tree-symbol">{}</span><span class="tree-label ellipsis">{}</span>{hint}</button>"#,
+            if selected { " selected" } else { "" }, h(id), depth.min(10), !rendered && node["movable"] == true, icon(widget_icon(kind), 16), h(kind)));
         if children && !collapsed {
-            widget_rows(state, groups, id, depth + 1, output);
+            widget_rows(state, groups, id, depth + 1, rendered, output);
         }
     }
 }
@@ -217,20 +262,52 @@ fn file_rows(
 }
 
 fn property(item: &Value) -> String {
+    property_input(item, item, string(&item["name"]), "")
+}
+
+fn property_input(item: &Value, field: &Value, label: &str, branch: &str) -> String {
     let name = string(&item["name"]);
     let kind = string(&item["type"]);
-    let expression = string(&item["expression"]);
-    let value = display(&item["value"]);
+    let conditional = &field["conditional"];
+    if conditional.is_object() {
+        let mut branches = String::new();
+        for (key, caption) in [("then", "If true"), ("else", "If false")] {
+            let path = if branch.is_empty() {
+                key.to_owned()
+            } else {
+                format!("{branch}/{key}")
+            };
+            branches.push_str(&property_input(item, &conditional[key], caption, &path));
+        }
+        return format!(
+            r#"<fieldset class="conditional-property"><legend>{}</legend><code title="Dart condition">{}</code>{branches}</fieldset>"#,
+            h(label),
+            h(string(&conditional["condition"])),
+        );
+    }
+    let expression = string(&field["expression"]);
+    let value = display(&field["value"]);
+    let aria = if branch.is_empty() {
+        name.to_owned()
+    } else {
+        let branch = branch
+            .split('/')
+            .map(|part| if part == "then" { "true" } else { "false" })
+            .collect::<Vec<_>>()
+            .join(" / ");
+        format!("{name} when {branch}")
+    };
     let data = format!(
-        r#" data-property="{}" data-type="{}" aria-label="{}""#,
+        r#" data-property="{}" data-type="{}" data-branch="{}" aria-label="{}""#,
         h(name),
         h(kind),
-        h(name)
+        h(branch),
+        h(&aria),
     );
-    let input = if item["editable"] != true {
+    let input = if field["editable"] != true {
         format!(
             r#"<input aria-label="{}" readonly value="{}" title="{}">"#,
-            h(name),
+            h(&aria),
             h(if expression.is_empty() {
                 "Code expression"
             } else {
@@ -281,17 +358,26 @@ fn property(item: &Value) -> String {
     };
     format!(
         r#"<label class="property"><span class="property-name">{}</span>{input}</label>"#,
-        h(name)
+        h(label)
     )
 }
 
 pub fn inspector(state: &State) {
     crate::agent_panel::context(state);
-    let Some(node) = state.widget() else {
+    let rendered = state.showing_rendered_widgets();
+    let node = state
+        .widget()
+        .filter(|_| !rendered || !state.rendered.selected.is_empty());
+    let Some(node) = node else {
+        let hint = if rendered {
+            "Select an item in the rendered tree to open its Dart source and properties."
+        } else {
+            "Choose a widget in the tree to see its properties and layout controls."
+        };
         html(
             "inspector",
             format!(
-                r#"<div class="inspector-empty">{}<strong>Select a widget</strong><p>Choose a widget in the tree to see its properties and layout controls.</p></div>"#,
+                r#"<div class="inspector-empty">{}<strong>Select a widget</strong><p>{hint}</p></div>"#,
                 icon("cursor", 16)
             ),
         );
@@ -328,6 +414,9 @@ pub fn inspector(state: &State) {
         content.push_str(&format!(r#"<button type="button" class="icon-button" data-widget-action="remove" aria-label="Remove widget" title="Remove widget">{}</button>"#, icon("trash", 16)));
     }
     content.push_str("</div></div>");
+    if rendered {
+        content.push_str(r#"<p class="inspect-note">Edits apply to every instance created by this Dart constructor.</p>"#);
+    }
     if !properties.is_empty() {
         content.push_str(&format!(
             r#"<div class="inspect-group"><h3>Appearance &amp; layout</h3>{properties}</div>"#

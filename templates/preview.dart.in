@@ -2,10 +2,12 @@
 import 'dart:convert';
 import 'dart:js_interop';
 
+import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
 import 'package:@PACKAGE@/main.dart' as app;
 
 const _origin = String.fromEnvironment('FREEFLOW_WORKBENCH_ORIGIN');
+const _libraryUri = @LIBRARY_URI@;
 
 @JS('window')
 external _BrowserWindow get _window;
@@ -23,8 +25,12 @@ extension type _BrowserMessage(JSObject _) implements JSObject {
 }
 
 Future<void> main(List<String> args) async {
+  final frame = Uri.base.queryParameters['freeflow'] ?? '';
   final Function entrypoint = app.main;
-  final result = Function.apply(entrypoint, entrypoint is Function() ? [] : [args]);
+  final result = Function.apply(
+    entrypoint,
+    entrypoint is Function() ? [] : [args],
+  );
   if (result is Future) {
     await result;
   }
@@ -35,13 +41,108 @@ Future<void> main(List<String> args) async {
   final binding = WidgetsBinding.instance;
   final service = WidgetInspectorService.instance;
   final selection = service.selection;
+  final ids = Expando<String>();
+  var sequence = 0;
+  String? previousTree;
   var enabled = false;
 
   void send(Map<String, Object?> message) {
-    parent.postMessage(jsonEncode(message).toJS, _origin.toJS);
+    parent.postMessage(
+      jsonEncode({...message, 'frame': frame}).toJS,
+      _origin.toJS,
+    );
   }
 
   void ready() => send({'type': 'freeflow:inspector-ready'});
+
+  Map<String, Object?>? location(
+    Element element,
+    InspectorSerializationDelegate delegate,
+  ) {
+    if (!debugIsLocalCreationLocation(element)) return null;
+    final data = element.toDiagnosticsNode().toJsonMap(delegate);
+    final creation = data['creationLocation'];
+    if (creation is! Map) return null;
+    final file = creation['file'];
+    if (file is! String ||
+        file.length > 2048 ||
+        !(file.startsWith('package:@PACKAGE@/') ||
+            file.startsWith('org-dartlang-app:/lib/') ||
+            file.startsWith(_libraryUri))) {
+      return null;
+    }
+    final line = creation['line'];
+    final column = creation['column'];
+    if (line is! int || column is! int) return null;
+    return {
+      'file': file,
+      'line': line,
+      'column': column,
+      'type': element.widget.runtimeType.toString(),
+    };
+  }
+
+  void tree(String selected) {
+    final root = binding.rootElement;
+    if (root == null) return;
+    final delegate = InspectorSerializationDelegate(
+      service: service,
+      subtreeDepth: 0,
+    );
+    final rows = <Map<String, Object?>>[];
+    var visited = 0;
+    var truncated = false;
+    List<double>? bounds;
+
+    void visit(Element element, String? parent, int depth) {
+      if (++visited > 12000 || rows.length >= 350 || depth > 600) {
+        truncated = true;
+        return;
+      }
+      final source = location(element, delegate);
+      if (source != null) {
+        final id = ids[element] ??= (++sequence).toString();
+        final widget = element.widget;
+        final label = widget is Text
+            ? (widget.data ?? widget.textSpan?.toPlainText() ?? '')
+            : '';
+        rows.add({
+          ...source,
+          'id': id,
+          'parent': parent,
+          'label': String.fromCharCodes(label.runes.take(100)),
+        });
+        parent = id;
+        if (id == selected) {
+          final render = element.findRenderObject();
+          if (render is RenderBox && render.attached && render.hasSize) {
+            final rect = MatrixUtils.transformRect(
+              render.getTransformTo(null),
+              render.paintBounds,
+            );
+            if (rect.isFinite && !rect.isEmpty) {
+              bounds = [rect.left, rect.top, rect.width, rect.height];
+            }
+          }
+        }
+      }
+      element.visitChildren((child) => visit(child, parent, depth + 1));
+    }
+
+    visit(root, null, 0);
+    final message = jsonEncode({
+      'type': 'freeflow:tree',
+      'frame': frame,
+      'nodes': rows,
+      'truncated': truncated,
+      'selected': selected,
+      'bounds': bounds,
+    });
+    if (message != previousTree) {
+      previousTree = message;
+      parent.postMessage(message.toJS, _origin.toJS);
+    }
+  }
 
   selection.addListener(() {
     final element = selection.currentElement;
@@ -51,24 +152,12 @@ Future<void> main(List<String> args) async {
     final locations = <Map<String, Object?>>[];
     final seen = <String>{};
     final delegate = InspectorSerializationDelegate(service: service);
+    String? selected;
     void add(Element element) {
-      final data = element.toDiagnosticsNode().toJsonMap(delegate);
-      final location = data['creationLocation'];
-      if (location is! Map || location['file'] is! String) {
-        return;
-      }
-      final file = location['file'] as String;
-      if (file.contains('/packages/flutter/') || file.startsWith('package:flutter/')) {
-        return;
-      }
-      final type = element.widget.runtimeType.toString();
-      if (seen.add([file, location['line'], location['column'], type].join(':'))) {
-        locations.add({
-          'file': file,
-          'line': location['line'],
-          'column': location['column'],
-          'type': type,
-        });
+      final source = location(element, delegate);
+      if (source != null && seen.add(source.values.join(':'))) {
+        selected ??= ids[element];
+        locations.add(source);
       }
     }
 
@@ -77,17 +166,28 @@ Future<void> main(List<String> args) async {
       add(ancestor);
       return locations.length < 24;
     });
-    send({'type': 'freeflow:selection', 'locations': locations});
+    send({
+      'type': 'freeflow:selection',
+      'locations': locations,
+      'selected': selected,
+    });
   });
 
   void onMessage(_BrowserMessage event) {
     final source = event.source;
     final data = event.data;
-    if (event.origin.toDart != _origin || source == null ||
-        !parent.strictEquals(source).toDart || !data.isA<JSString>()) {
+    if (event.origin.toDart != _origin ||
+        source == null ||
+        !parent.strictEquals(source).toDart ||
+        !data.isA<JSString>()) {
       return;
     }
-    switch ((data as JSString).toDart) {
+    final action = (data as JSString).toDart;
+    if (action.startsWith('freeflow:tree:')) {
+      tree(action.substring('freeflow:tree:'.length));
+      return;
+    }
+    switch (action) {
       case 'freeflow:hello':
         ready();
       case 'freeflow:inspect-on':

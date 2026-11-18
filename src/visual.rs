@@ -232,6 +232,80 @@ impl Span {
     }
 }
 
+const MAX_BRANCH_DEPTH: usize = 8;
+
+fn enclosed(tokens: &[Token<'_>], mut span: Span) -> Span {
+    while at(tokens, span.first) == "("
+        && tokens[span.first].close == Some(span.last)
+        && span.last > span.first + 1
+    {
+        span.first += 1;
+        span.last -= 1;
+    }
+    span
+}
+
+fn question(tokens: &[Token<'_>], index: usize) -> bool {
+    at(tokens, index) == "?"
+        && !tokens.get(index + 1).is_some_and(|next| {
+            tokens[index].end == next.start && matches!(next.text, "?" | "." | "[")
+        })
+        && !index.checked_sub(1).is_some_and(|previous| {
+            at(tokens, previous) == "?" && tokens[previous].end == tokens[index].start
+        })
+}
+
+struct Conditional {
+    condition: Span,
+    when_true: Span,
+    when_false: Span,
+}
+
+fn conditional(tokens: &[Token<'_>], span: Span) -> Option<Conditional> {
+    let span = enclosed(tokens, span);
+    let mut test = None;
+    let mut nested = 0;
+    let mut index = span.first;
+    while index <= span.last {
+        if question(tokens, index) {
+            if test.is_some() {
+                nested += 1;
+            } else {
+                test = Some(index);
+            }
+        } else if at(tokens, index) == ":" {
+            let question = test?;
+            if nested == 0 {
+                return (question > span.first && index > question + 1 && index < span.last).then(
+                    || Conditional {
+                        condition: Span {
+                            first: span.first,
+                            last: question - 1,
+                            comma: None,
+                        },
+                        when_true: Span {
+                            first: question + 1,
+                            last: index - 1,
+                            comma: None,
+                        },
+                        when_false: Span {
+                            first: index + 1,
+                            last: span.last,
+                            comma: None,
+                        },
+                    },
+                );
+            }
+            nested -= 1;
+        }
+        index = tokens[index]
+            .close
+            .unwrap_or_else(|| type_end(tokens, index, span.last + 1))
+            + 1;
+    }
+    None
+}
+
 fn segments(tokens: &[Token<'_>], open: usize, close: usize) -> Vec<Span> {
     let mut output = vec![];
     let mut first = open + 1;
@@ -441,6 +515,18 @@ struct Node<'a> {
     spec: &'static Spec,
 }
 
+impl Node<'_> {
+    fn slots(&self) -> &[(String, bool)] {
+        if matches!(
+            (self.kind, self.constructor),
+            ("ListView" | "GridView", "builder" | "separated" | "custom")
+        ) {
+            return &[];
+        }
+        &self.spec.slots
+    }
+}
+
 fn inspect(source: &str) -> Result<(Vec<Token<'_>>, Vec<Node<'_>>)> {
     let tokens = tokenize(source)?;
     let custom: HashSet<_> = tokens
@@ -479,17 +565,21 @@ fn inspect(source: &str) -> Result<(Vec<Token<'_>>, Vec<Node<'_>>)> {
         let Some(close) = tokens[open].close else {
             continue;
         };
-        if matches!(at(&tokens, close + 1), ":" | "{" | "=>")
-            || (at(&tokens, close + 1) == "=" && at(&tokens, close + 2) == ">")
-            || (custom.contains(kind) && at(&tokens, open + 1) == "{")
-        {
-            continue;
-        }
         let start = if matches!(previous, "const" | "new") {
             i - 1
         } else {
             i
         };
+        if matches!(at(&tokens, close + 1), "{" | "=>")
+            || (at(&tokens, close + 1) == ":"
+                && !start
+                    .checked_sub(1)
+                    .is_some_and(|prior| question(&tokens, prior)))
+            || (at(&tokens, close + 1) == "=" && at(&tokens, close + 2) == ">")
+            || (custom.contains(kind) && at(&tokens, open + 1) == "{")
+        {
+            continue;
+        }
         let offset = tokens[start].start;
         if offset >= last_start {
             let text = &source[last_start..offset];
@@ -583,7 +673,7 @@ fn member<'a>(
     tokens: &[Token<'_>],
 ) -> Option<Member<'a>> {
     let parent = parent?;
-    for (slot, multiple) in &parent.spec.slots {
+    for (slot, multiple) in parent.slots() {
         let Some((index, arg)) = parent
             .args
             .iter()
@@ -639,14 +729,14 @@ pub fn outline(source: &str) -> Result<Value> {
     let output: Vec<_> = nodes.iter().map(|node| {
         let properties: Vec<_> = node.spec.fields.iter().map(|item| {
             let context = property(node, item, &tokens);
-            let expression = context.arg.map(|arg| arg.expression(&tokens, source));
-            let value = expression.and_then(|expr| decode_literal(expr, item));
-            let constant = item.kind == "color" && expression.is_some_and(|expr| NAMED_COLOR.is_match(expr));
-            json!({ "name": item.name, "type": item.kind, "options": item.options,
-                "editable": context.editable && (expression.is_none() || value.is_some() || constant),
-                "value": value, "expression": expression.map(|expr| expr.chars().take(200).collect::<String>()) })
+            let span = context.arg.map(|arg| Span { first: arg.expression, ..arg.span });
+            let mut entry = describe_property(&tokens, source, item, span, context.editable, 0);
+            entry["name"] = json!(item.name);
+            entry["type"] = json!(item.kind);
+            entry["options"] = json!(item.options);
+            entry
         }).collect();
-        let slots: Vec<_> = node.spec.slots.iter().filter(|(name, multiple)| {
+        let slots: Vec<_> = node.slots().iter().filter(|(name, multiple)| {
             node.args.iter().copied().find(|arg| arg.name == Some(name))
                 .is_none_or(|arg| *multiple && list_for(&tokens, arg).is_some())
         }).map(|(name, _)| name).collect();
@@ -667,6 +757,67 @@ pub fn outline(source: &str) -> Result<Value> {
         json!({ "palette": CATALOG.palette.iter().map(|(name, _)| name).collect::<Vec<_>>(),
         "wrappers": CATALOG.wrappers.iter().map(|(name, _)| name).collect::<Vec<_>>(), "nodes": output }),
     )
+}
+
+fn literal_editable(expression: &str, item: &Field) -> bool {
+    decode_literal(expression, item).is_some()
+        || item.kind == "color" && NAMED_COLOR.is_match(expression)
+}
+
+fn describe_property(
+    tokens: &[Token<'_>],
+    source: &str,
+    item: &Field,
+    span: Option<Span>,
+    editable: bool,
+    depth: usize,
+) -> Value {
+    let span = span.map(|span| {
+        if depth > 0 {
+            enclosed(tokens, span)
+        } else {
+            span
+        }
+    });
+    let expression = span.map(|span| span.text(tokens, source));
+    let value = expression.and_then(|expr| decode_literal(expr, item));
+    let constant =
+        item.kind == "color" && expression.is_some_and(|expr| NAMED_COLOR.is_match(expr));
+    let branch = span
+        .filter(|_| editable && depth < MAX_BRANCH_DEPTH)
+        .and_then(|span| conditional(tokens, span))
+        .map(|branch| {
+            json!({
+                "condition": branch.condition.text(tokens, source).chars().take(200).collect::<String>(),
+                "then": describe_property(tokens, source, item, Some(branch.when_true), editable, depth + 1),
+                "else": describe_property(tokens, source, item, Some(branch.when_false), editable, depth + 1),
+            })
+        });
+    json!({
+        "editable": editable && (expression.is_none() || value.is_some() || constant),
+        "value": value,
+        "expression": expression.map(|expr| expr.chars().take(200).collect::<String>()),
+        "conditional": branch,
+    })
+}
+
+fn conditional_leaf(tokens: &[Token<'_>], arg: Arg<'_>, path: &str) -> Option<Span> {
+    let mut span = Span {
+        first: arg.expression,
+        ..arg.span
+    };
+    for (depth, branch) in path.split('/').enumerate() {
+        if depth >= MAX_BRANCH_DEPTH {
+            return None;
+        }
+        let branches = conditional(tokens, span)?;
+        span = match branch {
+            "then" => branches.when_true,
+            "else" => branches.when_false,
+            _ => return None,
+        };
+    }
+    Some(enclosed(tokens, span))
 }
 
 fn replace(source: &str, start: usize, end: usize, value: &str) -> String {
@@ -898,12 +1049,24 @@ pub fn edit(source: &str, command: &Value) -> Result<String> {
                 .ok_or_else(|| Problem::new(400, "This property is unavailable for the widget."))?;
             let context = property(node, item, &tokens);
             let expression = context.arg.map(|arg| arg.expression(&tokens, source));
-            if !context.editable
-                || expression.is_some_and(|expr| {
-                    decode_literal(expr, item).is_none()
-                        && !(item.kind == "color" && NAMED_COLOR.is_match(expr))
-                })
-            {
+            if let Some(branch) = command.get("branch") {
+                let leaf = context
+                    .arg
+                    .filter(|_| context.editable)
+                    .and_then(|arg| conditional_leaf(&tokens, arg, branch.as_str()?))
+                    .filter(|leaf| literal_editable(leaf.text(&tokens, source), item))
+                    .ok_or_else(|| {
+                        Problem::new(422, "Select an editable value in a conditional branch.")
+                    })?;
+                let value = encode_literal(&command["value"], item)?;
+                return Ok(replace(
+                    source,
+                    tokens[leaf.first].start,
+                    tokens[leaf.last].end,
+                    &value,
+                ));
+            }
+            if !context.editable || expression.is_some_and(|expr| !literal_editable(expr, item)) {
                 return Err(Problem::new(
                     422,
                     "Edit this Dart expression in the code editor.",
@@ -943,8 +1106,7 @@ pub fn edit(source: &str, command: &Value) -> Result<String> {
             let widget = field("widget");
             let error = || Problem::new(400, "Select an available widget and slot.");
             let (_, multiple) = node
-                .spec
-                .slots
+                .slots()
                 .iter()
                 .find(|(name, _)| name == slot)
                 .ok_or_else(error)?;

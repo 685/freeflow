@@ -25,9 +25,13 @@ pub fn entry(project: &Project) -> Option<Entry> {
         .prefix("freeflow-preview-")
         .tempdir_in(&tool)
         .ok()?;
+    let library = reqwest::Url::from_directory_path(project.root.join("lib")).ok()?;
     fs::write(
         folder.path().join("main.dart"),
-        ENTRY.replace("@PACKAGE@", &package),
+        ENTRY.replace("@PACKAGE@", &package).replace(
+            "@LIBRARY_URI@",
+            &json!(library.as_str()).to_string().replace('$', "\\$"),
+        ),
     )
     .ok()?;
     let name = folder.path().file_name()?.to_str()?;
@@ -101,7 +105,10 @@ pub fn resolve(projects: &Projects, project: &Project, input: &Value) -> Result<
             continue;
         };
         let column = location["column"].as_u64().unwrap_or(1);
-        let kind = location["type"].as_str().unwrap_or_default();
+        let kind = location["type"]
+            .as_str()
+            .and_then(|kind| kind.split('<').next())
+            .unwrap_or_default();
         let Some((source, outline)) = sources.entry(path.clone()).or_insert_with(|| {
             let source = projects.file(project, &path).ok()?;
             let outline = visual::outline(&source.content).unwrap_or_default();

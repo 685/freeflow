@@ -124,6 +124,9 @@ svg { display: block; flex-shrink: 0; }
 .explorer-tab { justify-content: flex-start; min-width: 0; flex: 1; }
 .explorer-tab.active { background: #2d2b3b; color: #e2dcff; border-color: #3b354d; }
 .explorer-content { flex: 1; min-height: 0; overflow: auto; padding: 10px 6px 14px; }
+.tree-mode { display: flex; gap: 3px; margin: 0 3px 7px; }
+.tree-mode .mode { flex: 1; justify-content: center; min-height: 27px; font-size: 11px; }
+.tree-mode .mode.active { color: #e2dcff; background: var(--accent-soft); }
 .source-select {
   display: flex; align-items: center; gap: 6px; margin: 0 3px 7px; padding: 0 7px;
   background: #22232b; border: 1px solid var(--border-strong); color: var(--subtle); border-radius: 6px;
@@ -202,6 +205,7 @@ svg { display: block; flex-shrink: 0; }
 .device-frame.tablet { border-radius: 22px; border-width: 7px; }
 .device-frame.desktop { border-radius: 13px; border-width: 4px; }
 .device-frame iframe { display: block; border: 0; width: 100%; height: 100%; background: #f8f7f2; }
+#widget-highlight { position: absolute; pointer-events: none; border: 2px solid #7b55ed; background: #9b78ff28; }
 .preview-empty {
   width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center;
   justify-content: center; padding: 24px; text-align: center; gap: 11px; color: var(--muted);
@@ -265,6 +269,10 @@ svg { display: block; flex-shrink: 0; }
 .property .color-input { display: flex; gap: 4px; min-width: 0; }
 .property .color-input input[type="color"] { width: 30px; flex: 0 0 30px; }
 .property .color-input input[type="text"] { flex: 1; }
+.inspect-note { margin: 0; padding: 9px 12px; color: var(--muted); font-size: 11px; line-height: 1.45; }
+.conditional-property { min-inline-size: 0; border: 1px solid var(--border); border-radius: 6px; padding: 7px; margin: 0 0 8px; }
+.conditional-property legend { padding: 0 4px; color: var(--muted); font-size: 11px; }
+.conditional-property > code { display: block; color: var(--accent); font: 11px/1.4 var(--mono); overflow-wrap: anywhere; margin-bottom: 8px; }
 .inspect-group .add-row { display: flex; align-items: center; gap: 4px; margin-top: 7px; }
 .inspect-group select { flex: 1; min-width: 0; font-size: 11px; }
 

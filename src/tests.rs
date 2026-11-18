@@ -186,6 +186,92 @@ fn visual_edits_preserve_dart_expressions_and_siblings() {
 }
 
 #[test]
+fn visual_conditional_values_keep_conditions_comments_and_other_branches() {
+    let source = r#"Widget build() => Text(
+      enabled ? (count > 2 ? 'ready' : /* keep */ 'waiting') : userLabel,
+      style: TextStyle(color: enabled ? Colors.green : Colors.red),
+    );"#;
+    let tree = visual::outline(source).unwrap();
+    let node = &tree["nodes"][0];
+    let properties = node["properties"].as_array().unwrap();
+    let text = properties
+        .iter()
+        .find(|item| item["name"] == "text")
+        .unwrap();
+    assert_eq!(text["conditional"]["condition"], "enabled");
+    assert_eq!(
+        text["conditional"]["then"]["conditional"]["condition"],
+        "count > 2"
+    );
+    assert_eq!(
+        text["conditional"]["then"]["conditional"]["else"]["value"],
+        "waiting"
+    );
+    assert_eq!(text["conditional"]["else"]["editable"], false);
+    let changed = visual::edit(
+        source,
+        &json!({
+            "id":node["id"],"operation":"property","name":"text","branch":"then/else",
+            "value":"Updated $value"
+        }),
+    )
+    .unwrap();
+    assert!(changed.contains("count > 2 ? 'ready' : /* keep */ 'Updated \\$value'"));
+    assert!(changed.contains(" : userLabel,"));
+    assert_eq!(visual::edit(source, &json!({
+        "id":node["id"],"operation":"property","name":"text","branch":"else","value":"Overwrite"
+    })).unwrap_err().status.as_u16(), 422);
+    let color = visual::edit(
+        source,
+        &json!({
+            "id":node["id"],"operation":"property","name":"color","branch":"then","value":"#226633"
+        }),
+    )
+    .unwrap();
+    assert!(color.contains("enabled ? const Color(0xff226633) : Colors.red"));
+    assert_eq!(visual::edit(source, &json!({
+        "id":node["id"],"operation":"property","name":"text","branch":"then/else/then","value":"Invalid"
+    })).unwrap_err().status.as_u16(), 422);
+}
+
+#[test]
+fn widget_branches_and_builder_slots_follow_the_selected_constructor() {
+    let source = "Widget build() => Column(children: [active ? const Text('On') : const Text('Off'), ListView.builder(itemCount: 2, itemBuilder: (context, index) => Text('Row'))]);";
+    let outline = visual::outline(source).unwrap();
+    let nodes = outline["nodes"].as_array().unwrap();
+    let on = nodes.iter().find(|node| node["label"] == "On").unwrap();
+    assert_eq!(on["removable"], false);
+    let builder = nodes
+        .iter()
+        .find(|node| node["type"] == "ListView.builder")
+        .unwrap();
+    assert_eq!(builder["slots"], json!([]));
+    let blocked = visual::edit(
+        source,
+        &json!({
+            "id":builder["id"],"operation":"add","slot":"children","widget":"Divider"
+        }),
+    );
+    assert!(blocked.is_err());
+    let changed = visual::edit(
+        source,
+        &json!({
+            "id":on["id"],"operation":"property","name":"text","value":"Enabled"
+        }),
+    )
+    .unwrap();
+    assert!(changed.contains("active ? const Text('Enabled') : const Text('Off')"));
+    let safe = "Widget build() => Text(data?.label ?? 'fallback');";
+    let property = &visual::outline(safe).unwrap()["nodes"][0]["properties"][0];
+    assert!(property["conditional"].is_null());
+    assert_eq!(property["editable"], false);
+    let ternary =
+        "Widget build() => Text((data?.ok ?? false) ? (a: 1, b: 2).toString() : 'fallback');";
+    let property = &visual::outline(ternary).unwrap()["nodes"][0]["properties"][0];
+    assert_eq!(property["conditional"]["else"]["editable"], true);
+}
+
+#[test]
 fn project_revisions_history_and_source_archives() {
     let (temp, projects, project) = fixture();
     let first = projects.file(&project, "lib/main.dart").unwrap();

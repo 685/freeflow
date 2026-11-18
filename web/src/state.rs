@@ -46,6 +46,15 @@ pub struct Draft {
     pub revision: Value,
 }
 
+#[derive(Default)]
+pub struct RenderedWidgets {
+    pub show: bool,
+    pub nodes: Vec<Value>,
+    pub selected: String,
+    pub collapsed: HashSet<String>,
+    pub truncated: bool,
+}
+
 pub struct State {
     pub projects: Vec<Value>,
     pub templates: Vec<Value>,
@@ -60,6 +69,7 @@ pub struct State {
     pub tabs: Vec<String>,
     pub tree: Vec<Value>,
     pub visual: Value,
+    pub rendered: RenderedWidgets,
     pub widget: String,
     pub folders: HashSet<String>,
     pub collapsed: HashSet<String>,
@@ -102,6 +112,7 @@ impl Default for State {
             tabs: vec![],
             tree: vec![],
             visual: Value::Null,
+            rendered: RenderedWidgets::default(),
             widget: String::new(),
             folders: ["lib".into(), "assets".into()].into(),
             collapsed: HashSet::new(),
@@ -140,6 +151,9 @@ impl State {
         } else {
             &self.file
         }
+    }
+    pub fn showing_rendered_widgets(&self) -> bool {
+        self.widgets && self.rendered.show && self.mode.shows_preview()
     }
     pub fn draft_key(&self, path: &str) -> (String, String) {
         (self.project_id().to_owned(), path.to_owned())
