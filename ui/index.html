@@ -18,6 +18,10 @@
       <button class="button project-switch" id="project-switch" type="button">
         <span class="ellipsis" id="active-project">Projects</span><span data-icon="chevrons"></span>
       </button>
+      <div class="inline-actions" role="group" aria-label="Saved edits">
+        <button type="button" id="undo-edit" class="icon-button" aria-label="Undo saved edit" title="Undo saved edit (Ctrl/Cmd+Z)" disabled><span data-icon="undo"></span></button>
+        <button type="button" id="redo-edit" class="icon-button" aria-label="Redo saved edit" title="Redo saved edit (Ctrl/Cmd+Shift+Z)" disabled><span data-icon="redo"></span></button>
+      </div>
     </div>
     <nav class="mode-switch" aria-label="Workspace">
       <button type="button" class="mode active" data-mode="design"><span data-icon="design"></span>Design</button>

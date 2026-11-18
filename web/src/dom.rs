@@ -259,7 +259,10 @@ pub async fn api(route: &str) -> Result<Value> {
     json_response(&request(route, "GET", None).await?).await
 }
 pub async fn send(route: &str, method: &str, data: Value) -> Result<Value> {
-    json_response(&request(route, method, Some(&data)).await?).await
+    let writing = crate::saved_edits::writing(route, method);
+    let result = async { json_response(&request(route, method, Some(&data)).await?).await }.await;
+    crate::saved_edits::written(writing).await;
+    result
 }
 pub async fn post(route: &str, data: Value) -> Result<Value> {
     send(route, "POST", data).await

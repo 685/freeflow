@@ -422,6 +422,251 @@ fn widget_branches_and_builder_slots_follow_the_selected_constructor() {
 }
 
 #[test]
+fn saved_visual_edits_undo_redo_exact_source_and_branch_after_a_new_edit() {
+    let (_home, projects, project) = fixture();
+    let path = "lib/main.dart";
+    let original = "// 🎯\r\nWidget build() => Column(children: [Text('A'), Text('B')]);\r\n";
+    fs::write(project.root.join(path), original).unwrap();
+    let replay = |action| {
+        let history = projects.edit_history(&project);
+        projects
+            .replay_edit(&project, action, history["revision"].as_str().unwrap())
+            .unwrap()
+    };
+    let tree = server::read_widgets(&projects, &project, path).unwrap();
+    let wrapped = server::write_widgets(
+        &projects,
+        &project,
+        &json!({"path":path,"revision":tree["revision"],"command":{
+        "id":tree["nodes"][1]["id"],"operation":"wrap","widget":"Padding"
+        }}),
+    )
+    .unwrap();
+    let tree = server::read_widgets(&projects, &project, path).unwrap();
+    let last = tree["nodes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|node| node["label"] == "B")
+        .unwrap();
+    let removed = server::write_widgets(
+        &projects,
+        &project,
+        &json!({"path":path,"revision":tree["revision"],"command":{
+            "id":last["id"],"operation":"remove"
+        }}),
+    )
+    .unwrap();
+    assert_eq!(projects.edit_history(&project)["undoCount"], 2);
+    replay("undo");
+    assert_eq!(
+        fs::read_to_string(project.root.join(path)).unwrap(),
+        wrapped["content"]
+    );
+    replay("undo");
+    assert_eq!(
+        fs::read(project.root.join(path)).unwrap(),
+        original.as_bytes()
+    );
+    replay("redo");
+    let history = projects.edit_history(&project);
+    let same = projects.file(&project, path).unwrap();
+    projects
+        .save(
+            &project,
+            path,
+            same.content.clone(),
+            same.revision.as_deref(),
+        )
+        .unwrap();
+    assert_eq!(
+        projects.edit_history(&project),
+        history,
+        "A no-op save must preserve Redo"
+    );
+    replay("redo");
+    assert_eq!(
+        fs::read_to_string(project.root.join(path)).unwrap(),
+        removed["content"]
+    );
+    replay("undo");
+    let before = projects.file(&project, path).unwrap();
+    projects
+        .save(
+            &project,
+            path,
+            format!("{}// new edit\n", before.content),
+            before.revision.as_deref(),
+        )
+        .unwrap();
+    assert_eq!(projects.edit_history(&project)["redoCount"], 0);
+}
+
+#[test]
+fn saved_multi_file_edits_replay_together_and_reject_external_changes_before_writing() {
+    let (_home, projects, project) = fixture();
+    let main = projects.file(&project, "lib/main.dart").unwrap();
+    let old = project.root.join("lib/old.dart");
+    fs::write(&old, "// old 🧩\n").unwrap();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(&old, fs::Permissions::from_mode(0o755)).unwrap();
+    }
+    let old_source = projects.file(&project, "lib/old.dart").unwrap();
+    projects
+        .apply_edits(
+            &project,
+            &[
+                projects::FileEdit {
+                    path: main.path.clone(),
+                    revision: main.revision.clone(),
+                    content: Some("// changed\n".into()),
+                },
+                projects::FileEdit {
+                    path: old_source.path.clone(),
+                    revision: old_source.revision,
+                    content: None,
+                },
+                projects::FileEdit {
+                    path: "lib/new.dart".into(),
+                    revision: None,
+                    content: Some("// created\n".into()),
+                },
+            ],
+        )
+        .unwrap();
+    let history = projects.edit_history(&project);
+    assert_eq!(history["undoCount"], 1);
+    assert_eq!(history["undo"]["files"].as_array().unwrap().len(), 3);
+    projects
+        .replay_edit(&project, "undo", history["revision"].as_str().unwrap())
+        .unwrap();
+    assert_eq!(
+        projects.file(&project, &main.path).unwrap().content,
+        main.content
+    );
+    assert_eq!(fs::read_to_string(&old).unwrap(), old_source.content);
+    assert!(!project.root.join("lib/new.dart").exists());
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        assert_eq!(
+            fs::metadata(&old).unwrap().permissions().mode() & 0o777,
+            0o755
+        );
+    }
+    let history = projects.edit_history(&project);
+    fs::write(project.root.join("lib/new.dart"), "// external work").unwrap();
+    let conflict = projects
+        .replay_edit(&project, "redo", history["revision"].as_str().unwrap())
+        .unwrap_err();
+    assert_eq!(conflict.status.as_u16(), 409);
+    assert_eq!(projects.edit_history(&project), history);
+    assert_eq!(
+        projects.file(&project, &main.path).unwrap().content,
+        main.content
+    );
+    assert!(old.is_file());
+    assert_eq!(
+        fs::read_to_string(project.root.join("lib/new.dart")).unwrap(),
+        "// external work"
+    );
+    fs::remove_file(project.root.join("lib/new.dart")).unwrap();
+    projects
+        .replay_edit(&project, "redo", history["revision"].as_str().unwrap())
+        .unwrap();
+    assert!(!old.exists());
+    assert_eq!(
+        projects.file(&project, &main.path).unwrap().content,
+        "// changed\n"
+    );
+    assert_eq!(
+        projects.file(&project, "lib/new.dart").unwrap().content,
+        "// created\n"
+    );
+}
+
+#[test]
+fn concurrent_undo_requests_only_apply_once_and_history_is_scoped_to_the_project() {
+    let (home, projects, project) = fixture();
+    let other_root = home.path().join("other");
+    fs::create_dir_all(other_root.join("lib")).unwrap();
+    fs::write(
+        other_root.join("pubspec.yaml"),
+        "name: other\ndependencies:\n  flutter:\n    sdk: flutter\n",
+    )
+    .unwrap();
+    let other = projects
+        .import_folder(other_root.to_str().unwrap())
+        .unwrap();
+    let projects = Arc::new(projects);
+    let source = projects.file(&project, "lib/main.dart").unwrap();
+    projects
+        .save(
+            &project,
+            &source.path,
+            "// saved\n".into(),
+            source.revision.as_deref(),
+        )
+        .unwrap();
+    projects
+        .save(&other, "lib/main.dart", "// other project\n".into(), None)
+        .unwrap();
+    let revision = projects.edit_history(&project)["revision"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let handles: Vec<_> = (0..2)
+        .map(|_| {
+            let (projects, project, revision) =
+                (projects.clone(), project.clone(), revision.clone());
+            std::thread::spawn(move || projects.replay_edit(&project, "undo", &revision))
+        })
+        .collect();
+    let results: Vec<_> = handles
+        .into_iter()
+        .map(|handle| handle.join().unwrap())
+        .collect();
+    assert_eq!(results.iter().filter(|result| result.is_ok()).count(), 1);
+    assert!(
+        results
+            .iter()
+            .filter_map(|result| result.as_ref().err())
+            .all(|error| error.status.as_u16() == 409)
+    );
+    assert_eq!(
+        projects.file(&project, &source.path).unwrap().content,
+        source.content
+    );
+    assert_eq!(projects.edit_history(&other)["undoCount"], 1);
+    assert!(projects.replay_edit(&other, "undo", &revision).is_err());
+    assert_eq!(
+        projects.file(&other, "lib/main.dart").unwrap().content,
+        "// other project\n"
+    );
+}
+
+#[test]
+fn non_utf8_files_cannot_create_a_lossy_undo_snapshot() {
+    let (_home, projects, project) = fixture();
+    let bytes = b"// invalid \xff\xfe\n";
+    fs::write(project.root.join("lib/main.dart"), bytes).unwrap();
+    let source = projects.file(&project, "lib/main.dart").unwrap();
+    let error = projects
+        .save(
+            &project,
+            "lib/main.dart",
+            "// new".into(),
+            source.revision.as_deref(),
+        )
+        .unwrap_err();
+    assert_eq!(error.status.as_u16(), 422);
+    assert_eq!(fs::read(project.root.join("lib/main.dart")).unwrap(), bytes);
+    assert_eq!(projects.edit_history(&project)["undoCount"], 0);
+}
+
+#[test]
 fn project_revisions_history_and_source_archives() {
     let (temp, projects, project) = fixture();
     let first = projects.file(&project, "lib/main.dart").unwrap();

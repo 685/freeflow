@@ -443,6 +443,7 @@ pub fn widget_options(node: &Value, slot: &str) -> String {
 }
 
 pub fn editor_header(state: &State) {
+    crate::saved_edits::controls(state);
     let file = state.current_file();
     let source = &state.source;
     let draft = state.drafts.get(&state.draft_key(file));

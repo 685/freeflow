@@ -77,6 +77,12 @@ pub fn call(jobs: &Arc<Jobs>, name: &str, args: &Value, scope: Option<&str>) -> 
     let project = projects.get(id)?;
     match name {
         "list_files" => Ok(json!(projects.tree(&project)?)),
+        "edit_history" => Ok(projects.edit_history(&project)),
+        "replay_edit" => projects.replay_edit(
+            &project,
+            required(args, "action")?,
+            required(args, "revision")?,
+        ),
         "read_file" => Ok(json!(projects.file(&project, required(args, "path")?)?)),
         "write_file" => Ok(json!(projects.save(
             &project,

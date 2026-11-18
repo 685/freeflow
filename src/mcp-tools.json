@@ -1,5 +1,42 @@
 [
   {
+    "name": "edit_history",
+    "description": "Read the next saved project edit available for Undo and Redo, and its history revision. History is kept while Freeflow is running.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "type": "string",
+          "description": "Project ID from list_projects. Omit on a project-scoped connection."
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    },
+    "annotations": { "readOnlyHint": true, "openWorldHint": false }
+  },
+  {
+    "name": "replay_edit",
+    "description": "Undo or redo the latest saved project edit. A multi-file change is replayed together. Read edit_history first; external file changes and stale history revisions are rejected.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "type": "string",
+          "description": "Project ID from list_projects. Omit on a project-scoped connection."
+        },
+        "action": { "enum": ["undo", "redo"] },
+        "revision": {
+          "type": "string",
+          "description": "History revision from edit_history, rather than a file revision."
+        }
+      },
+      "required": ["action", "revision"],
+      "additionalProperties": false
+    },
+    "annotations": { "readOnlyHint": false, "destructiveHint": true, "openWorldHint": false }
+  },
+  {
     "name": "list_projects",
     "description": "List Flutter projects in the running local Freeflow workbench.",
     "inputSchema": {

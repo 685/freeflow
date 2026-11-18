@@ -1,3 +1,4 @@
+use crate::edits::{ChangedFile, History};
 use crate::files::{self, Problem, Result, Source, Tree};
 use base64::Engine as _;
 use chrono::Utc;
@@ -39,7 +40,7 @@ pub struct Project {
 pub struct Projects {
     pub home: PathBuf,
     registry: Mutex<()>,
-    writes: Mutex<()>,
+    writes: Mutex<History>,
 }
 
 pub struct FileEdit {
@@ -49,6 +50,7 @@ pub struct FileEdit {
 }
 
 struct PreparedEdit<'a> {
+    path: &'a str,
     target: PathBuf,
     before: Option<Source>,
     after: Option<&'a str>,
@@ -114,7 +116,7 @@ impl Projects {
         Self {
             home,
             registry: Mutex::new(()),
-            writes: Mutex::new(()),
+            writes: Mutex::new(History::default()),
         }
     }
 
@@ -161,7 +163,9 @@ impl Projects {
         if count == records.len() {
             return Err(Problem::new(404, "Project not found."));
         }
-        files::write_json(&self.database(), &records)
+        files::write_json(&self.database(), &records)?;
+        self.writes.lock().unwrap().forget(id);
+        Ok(())
     }
 
     pub fn import_folder(&self, input: &str) -> Result<Project> {
@@ -331,11 +335,9 @@ impl Projects {
         expected: Option<&str>,
         transform: impl FnOnce(Option<&Source>) -> Result<String>,
     ) -> Result<Source> {
-        let _guard = self.writes.lock().unwrap();
+        let mut journal = self.writes.lock().unwrap();
         let target = files::project_file(&project.root, relative, true)?;
-        let previous = files::exists(&target)?
-            .then(|| files::read_source(&target, relative))
-            .transpose()?;
+        let previous = self.agent_source(project, relative)?;
         if expected
             != previous
                 .as_ref()
@@ -366,11 +368,21 @@ impl Projects {
             return Err(error);
         }
         history.into_iter().for_each(prune_history);
-        Ok(Source {
+        let saved = Source {
             path: relative.into(),
             revision: Some(files::revision(&content)),
             content,
-        })
+        };
+        journal.record(
+            &project.id,
+            vec![ChangedFile {
+                path: relative.into(),
+                before: previous.map(|source| source.content),
+                after: Some(saved.content.clone()),
+                mode,
+            }],
+        );
+        Ok(saved)
     }
 
     pub fn agent_source(&self, project: &Project, relative: &str) -> Result<Option<Source>> {
@@ -387,7 +399,18 @@ impl Projects {
     }
 
     pub fn apply_edits(&self, project: &Project, edits: &[FileEdit]) -> Result<()> {
-        let _guard = self.writes.lock().unwrap();
+        let mut journal = self.writes.lock().unwrap();
+        let changes = self.apply_edits_inner(project, edits, &[])?;
+        journal.record(&project.id, changes);
+        Ok(())
+    }
+
+    fn apply_edits_inner(
+        &self,
+        project: &Project,
+        edits: &[FileEdit],
+        restore: &[ChangedFile],
+    ) -> Result<Vec<ChangedFile>> {
         let mut seen = HashSet::new();
         let mut pending = Vec::with_capacity(edits.len());
         for edit in edits {
@@ -416,8 +439,16 @@ impl Projects {
                 validate_text(&edit.path, text)?;
             }
             if before.as_ref().map(|source| source.content.as_str()) != after {
-                let mode = file_mode(&target, before.is_some())?;
+                let mode = if before.is_none() {
+                    restore
+                        .iter()
+                        .find(|file| file.path == edit.path)
+                        .map_or(0o644, |file| file.mode)
+                } else {
+                    file_mode(&target, true)?
+                };
                 pending.push(PreparedEdit {
+                    path: &edit.path,
                     target,
                     before,
                     after,
@@ -447,7 +478,45 @@ impl Projects {
             }
         }
         history.into_iter().for_each(prune_history);
-        Ok(())
+        Ok(pending
+            .into_iter()
+            .map(|edit| ChangedFile {
+                path: edit.path.into(),
+                before: edit.before.map(|source| source.content),
+                after: edit.after.map(str::to_owned),
+                mode: edit.mode,
+            })
+            .collect())
+    }
+
+    pub fn edit_history(&self, project: &Project) -> Value {
+        self.writes.lock().unwrap().status(&project.id)
+    }
+
+    pub fn replay_edit(&self, project: &Project, action: &str, revision: &str) -> Result<Value> {
+        let mut journal = self.writes.lock().unwrap();
+        let change = journal.pending(&project.id, action, revision)?;
+        let edits: Vec<_> = change
+            .files
+            .iter()
+            .map(|file| {
+                let (expected, content) = if action == "undo" {
+                    (&file.after, &file.before)
+                } else {
+                    (&file.before, &file.after)
+                };
+                FileEdit {
+                    path: file.path.clone(),
+                    revision: expected.as_ref().map(files::revision),
+                    content: content.clone(),
+                }
+            })
+            .collect();
+        self.apply_edits_inner(project, &edits, &change.files)?;
+        journal.complete(&project.id, action);
+        Ok(
+            json!({"history":journal.status(&project.id), "files":edits.iter().map(|edit| json!({"path":edit.path,"exists":edit.content.is_some()})).collect::<Vec<_>>()}),
+        )
     }
 
     fn history_dir(&self, project: &Project, relative: &str) -> PathBuf {

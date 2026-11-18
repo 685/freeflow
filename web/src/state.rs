@@ -94,6 +94,10 @@ pub struct State {
     pub generation: u64,
     pub file_load: u64,
     pub dragged: Option<Value>,
+    pub edit_history: Value,
+    pub edit_history_busy: bool,
+    pub edit_history_request: u64,
+    pub edit_history_writes: usize,
 }
 
 impl Default for State {
@@ -137,6 +141,10 @@ impl Default for State {
             generation: 0,
             file_load: 0,
             dragged: None,
+            edit_history: Value::Null,
+            edit_history_busy: false,
+            edit_history_request: 0,
+            edit_history_writes: 0,
         }
     }
 }

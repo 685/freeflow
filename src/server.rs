@@ -523,6 +523,7 @@ async fn project_route(
             "git-diff" => git::diff(projects, &project, &file).await?,
             "agent" => agent::state(jobs, &project)?,
             "history" => json!(projects.history(&project, &file)?),
+            "edits" => projects.edit_history(&project),
             "history-version" => projects.history_version(&project, &file, &query(url, "id"))?,
             "preview" => jobs.preview(&project.id),
             "phone-preview" => json!({
@@ -568,6 +569,14 @@ async fn project_route(
         let (code, value) = match part {
             "widgets" => (200, write_widgets(projects, &project, &input)?),
             "widget-snippet" => (200, widget_snippet(projects, &project, &input)?),
+            "edits" => (
+                200,
+                projects.replay_edit(
+                    &project,
+                    required(&input, "action")?,
+                    required(&input, "revision")?,
+                )?,
+            ),
             "theme" => {
                 let path = required(&input, "path")?;
                 if !path.ends_with(".dart") {

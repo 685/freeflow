@@ -400,6 +400,7 @@ pub async fn poll(project: &str) -> Result {
             job["status"] == "failed",
         );
     }
+    crate::saved_edits::refresh(project).await?;
     refresh(project).await?;
     if succeeded && job["result"]["checkpoint"].is_object() {
         update_source(project).await?;
@@ -430,6 +431,7 @@ async fn small_action(action: &str, checkpoint: String) -> Result {
         .await?;
         crate::wait_job(job).await?;
         if action == "undo" {
+            crate::saved_edits::refresh(&project).await?;
             update_source(&project).await?;
         }
         refresh(&project).await

@@ -7,6 +7,7 @@ mod editor_assist;
 mod phone_preview;
 mod planner;
 mod preview_inspector;
+mod saved_edits;
 mod source_control;
 mod state;
 mod store_upload;
@@ -97,6 +98,7 @@ pub async fn activate(project: Value) -> Result {
     agent_panel::reset_inputs();
     view::render();
     refresh_tree(&project_id).await?;
+    saved_edits::refresh(&project_id).await?;
     let path = state::change(|state| {
         if state.generation != generation {
             return None;
@@ -566,6 +568,9 @@ async fn run_command(action: &str) -> Result {
     .await?;
     track(&job, true);
     wait_job(job).await?;
+    if action == "format" {
+        saved_edits::refresh(&project).await?;
+    }
     if action == "format" && current(&project) && state::read(|state| state.current_file() == path)
     {
         load_file(&path, true).await?;
@@ -585,6 +590,7 @@ async fn poll(tick: u32) -> Result {
         return Ok(());
     }
     if let Ok(project) = project_id() {
+        saved_edits::refresh(&project).await?;
         agent_panel::poll(&project).await?;
         device_panel::poll(&project).await?;
         phone_preview::poll(&project).await?;
@@ -1092,6 +1098,7 @@ fn start() -> std::result::Result<(), JsValue> {
     register_events();
     preview_inspector::initialize();
     widget_clipboard::initialize();
+    saved_edits::initialize();
     agent_panel::initialize();
     ui::click("run-device", || ui::spawn(device_panel::open()));
     planner::initialize();

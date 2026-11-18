@@ -3,6 +3,7 @@ mod archive;
 mod backends;
 mod deploy;
 mod devices;
+mod edits;
 mod files;
 mod flutter;
 mod git;

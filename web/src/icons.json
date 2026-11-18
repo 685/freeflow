@@ -58,5 +58,7 @@
   "warning": "<path d=\"M12 4 2.5 20h19zM12 10v4m0 3h.01\"/>",
   "check": "<path d=\"m5 12 4 4 10-10\"/>",
   "search": "<circle cx=\"10\" cy=\"10\" r=\"5.5\"/><path d=\"m14 14 5 5\"/>",
-  "menu": "<path d=\"M5 6h14M5 12h14M5 18h14\"/>"
+  "menu": "<path d=\"M5 6h14M5 12h14M5 18h14\"/>",
+  "undo": "<path d=\"m9 4-5 5 5 5M4 9h10a6 6 0 0 1 0 12h-2\"/>",
+  "redo": "<path d=\"m15 4 5 5-5 5M20 9H10a6 6 0 0 0 0 12h2\"/>"
 }
