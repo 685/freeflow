@@ -88,11 +88,12 @@
       <div id="workspace-surfaces" class="workspace-surfaces" hidden>
       <section class="preview-pane" id="design-pane" hidden>
         <div class="section-toolbar preview-toolbar">
-          <div class="section-name"><span data-icon="preview"></span>Preview</div>
+          <div class="section-name"><span data-icon="preview"></span><span class="preview-label">Preview</span></div>
           <div class="device-switch" role="group" aria-label="Preview viewport">
             <button type="button" class="device active" data-device="phone" title="Phone" aria-label="Phone"><span data-icon="phone"></span><span class="device-label">Phone</span></button>
             <button type="button" class="device" data-device="tablet" title="Tablet" aria-label="Tablet"><span data-icon="tablet"></span><span class="device-label">Tablet</span></button>
             <button type="button" class="device" data-device="desktop" title="Desktop" aria-label="Desktop"><span data-icon="desktop"></span><span class="device-label">Desktop</span></button>
+            <button type="button" class="device" data-device="expanded" title="Expanded" aria-label="Expanded"><span data-icon="expand"></span><span class="device-label">Expanded</span></button>
           </div>
           <div class="inline-actions">
             <button type="button" id="mobile-inspector" class="icon-button compact-inspector" aria-label="Toggle properties" title="Properties"><span data-icon="sliders"></span></button>
@@ -102,7 +103,7 @@
             <button type="button" id="phone-preview" class="icon-button" aria-label="Preview on phone" title="Preview on phone" disabled><span data-icon="qr"></span></button>
           </div>
         </div>
-        <div class="canvas" id="canvas">
+        <div class="canvas" id="canvas" tabindex="0" role="region" aria-label="Preview canvas">
           <div class="canvas-content" id="canvas-content">
             <div class="device-frame phone" id="device-frame">
               <iframe id="preview-frame" title="Live Flutter app preview" sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-downloads" referrerpolicy="no-referrer" hidden></iframe>
@@ -110,7 +111,16 @@
               <div class="preview-empty" id="preview-empty"></div>
             </div>
           </div>
-          <div id="canvas-info" class="canvas-info"></div>
+          <div id="preview-pan-surface" class="preview-pan-surface" tabindex="0" role="group" aria-label="Pan preview" hidden></div>
+          <div class="preview-canvas-tools" role="group" aria-label="Preview controls">
+            <button type="button" id="preview-zoom-out" class="icon-button" aria-label="Zoom out" title="Zoom out"><span data-icon="minus"></span></button>
+            <select id="preview-zoom" aria-label="Preview zoom" title="Preview zoom"></select>
+            <button type="button" id="preview-zoom-in" class="icon-button" aria-label="Zoom in" title="Zoom in"><span data-icon="plus"></span></button>
+            <button type="button" id="preview-fit" class="icon-button" aria-label="Fit preview" title="Fit and center preview"><span data-icon="expand"></span></button>
+            <button type="button" id="preview-pan" class="icon-button" aria-label="Pan mode" title="Pan preview. Drag to move; Escape to return to the app." aria-pressed="false"><span data-icon="hand"></span></button>
+            <select id="preview-brightness" aria-label="App brightness"><option value="system">System</option><option value="light">Light</option><option value="dark">Dark</option></select>
+            <span id="canvas-info" class="canvas-info"></span>
+          </div>
         </div>
       </section>
 

@@ -1,7 +1,9 @@
 // Freeflow generates this entrypoint in .dart_tool for a debug preview.
 import 'dart:convert';
 import 'dart:js_interop';
+import 'dart:ui' show Brightness;
 
+import 'package:flutter/foundation.dart' show debugBrightnessOverride;
 import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
 import 'package:@PACKAGE@/main.dart' as app;
@@ -15,7 +17,28 @@ external _BrowserWindow get _window;
 extension type _BrowserWindow(JSObject _) implements JSObject {
   external _BrowserWindow get parent;
   external void postMessage(JSString message, JSString targetOrigin);
-  external void addEventListener(JSString event, JSFunction listener);
+  external void addEventListener(
+    JSString event,
+    JSFunction listener, [
+    _EventOptions? options,
+  ]);
+}
+
+extension type _EventOptions._(JSObject _) implements JSObject {
+  external factory _EventOptions({
+    required bool passive,
+    required bool capture,
+  });
+}
+
+extension type _BrowserWheel(JSObject _) implements JSObject {
+  external bool get ctrlKey;
+  external bool get metaKey;
+  external double get deltaY;
+  external double get clientX;
+  external double get clientY;
+  external void preventDefault();
+  external void stopPropagation();
 }
 
 extension type _BrowserMessage(JSObject _) implements JSObject {
@@ -45,6 +68,7 @@ Future<void> main(List<String> args) async {
   var sequence = 0;
   String? previousTree;
   var enabled = false;
+  var brightnessRequest = 0;
 
   void send(Map<String, Object?> message) {
     parent.postMessage(
@@ -187,6 +211,27 @@ Future<void> main(List<String> args) async {
       tree(action.substring('freeflow:tree:'.length));
       return;
     }
+    if (action.startsWith('freeflow:brightness:')) {
+      final mode = action.substring('freeflow:brightness:'.length);
+      if (!const ['system', 'light', 'dark'].contains(mode)) return;
+      debugBrightnessOverride = switch (mode) {
+        'dark' => Brightness.dark,
+        'light' => Brightness.light,
+        _ => null,
+      };
+      final request = ++brightnessRequest;
+      binding.reassembleApplication().then(
+        (_) {
+          if (request == brightnessRequest) {
+            send({'type': 'freeflow:brightness', 'value': mode});
+          }
+        },
+        onError: (Object error, StackTrace stack) {
+          send({'type': 'freeflow:brightness-error'});
+        },
+      );
+      return;
+    }
     switch (action) {
       case 'freeflow:hello':
         ready();
@@ -203,5 +248,25 @@ Future<void> main(List<String> args) async {
   }
 
   _window.addEventListener('message'.toJS, onMessage.toJS);
+  void onWheel(_BrowserWheel event) {
+    if ((event.ctrlKey || event.metaKey) &&
+        event.deltaY.isFinite &&
+        event.deltaY != 0) {
+      event.preventDefault();
+      event.stopPropagation();
+      send({
+        'type': 'freeflow:zoom',
+        'delta': event.deltaY,
+        'x': event.clientX,
+        'y': event.clientY,
+      });
+    }
+  }
+
+  _window.addEventListener(
+    'wheel'.toJS,
+    onWheel.toJS,
+    _EventOptions(passive: false, capture: true),
+  );
   ready();
 }

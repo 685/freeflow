@@ -517,38 +517,7 @@ pub fn editor(state: &State) {
 }
 
 pub fn fit(state: &State) {
-    let canvas = id("canvas");
-    let frame = id("device-frame");
-    let (width, height, bezel) = match state.device.as_str() {
-        "tablet" => (768, 930, 14),
-        "desktop" => (1280, 760, 8),
-        _ => (390, 780, 12),
-    };
-    let width_frame = f64::from(width + bezel);
-    let height_frame = f64::from(height + bezel);
-    let scale = ((f64::from(canvas.client_width()) - 46.0) / width_frame)
-        .min((f64::from(canvas.client_height()) - 63.0) / height_frame)
-        .clamp(0.12, 1.0);
-    frame.set_class_name(&format!("device-frame {}", state.device));
-    let frame_style = frame.style();
-    let _ = frame_style.set_property("width", &format!("{width_frame}px"));
-    let _ = frame_style.set_property("height", &format!("{height_frame}px"));
-    let _ = frame_style.set_property("transform", &format!("scale({scale})"));
-    let canvas_style = id("canvas-content").style();
-    let _ = canvas_style.set_property("width", &format!("{}px", width_frame * scale));
-    let _ = canvas_style.set_property("height", &format!("{}px", height_frame * scale));
-    let refreshing = if state.preview["result"]["reloading"] == true {
-        r#"<span class="busy-text">Refreshing</span>"#
-    } else {
-        ""
-    };
-    html(
-        "canvas-info",
-        format!(
-            "<span>{width} × {height}</span><span>·</span><span>{}%</span>{refreshing}",
-            (scale * 100.0).round()
-        ),
-    );
+    crate::preview_canvas::render(state);
 }
 
 pub fn preview(state: &mut State, force: bool) {

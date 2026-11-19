@@ -6,6 +6,7 @@ mod editor;
 mod editor_assist;
 mod phone_preview;
 mod planner;
+mod preview_canvas;
 mod preview_inspector;
 mod saved_edits;
 mod source_control;
@@ -87,6 +88,7 @@ pub async fn activate(project: Value) -> Result {
             flutter: std::mem::take(&mut state.flutter),
             drafts: std::mem::take(&mut state.drafts),
             device: state.device.clone(),
+            canvas: state.canvas.clone(),
             generation: state.generation,
             project,
             ..Default::default()
@@ -792,19 +794,7 @@ fn register_events() {
     for button in all("[data-device]") {
         let device = button.get_attribute("data-device").unwrap_or_default();
         ui::listen(&button, "click", move |_| {
-            state::change(|state| {
-                state.device = device.clone();
-                for button in all("[data-device]") {
-                    let active = button.get_attribute("data-device").as_deref() == Some(&device);
-                    ui::toggle(&button, "active", active);
-                    ui::attr(
-                        &button,
-                        "aria-pressed",
-                        if active { "true" } else { "false" },
-                    );
-                }
-                view::fit(state);
-            });
+            preview_canvas::device(&device);
         });
     }
     for button in all("[data-explorer]") {
@@ -1099,6 +1089,7 @@ fn start() -> std::result::Result<(), JsValue> {
     preview_inspector::initialize();
     widget_clipboard::initialize();
     saved_edits::initialize();
+    preview_canvas::initialize();
     agent_panel::initialize();
     ui::click("run-device", || ui::spawn(device_panel::open()));
     planner::initialize();

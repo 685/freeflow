@@ -25,6 +25,15 @@ fn send(state: &State, message: &str) {
     }
 }
 
+pub fn brightness(state: &State) {
+    let value = match state.canvas.brightness.as_str() {
+        "light" => "light",
+        "dark" => "dark",
+        _ => "system",
+    };
+    send(state, &format!("freeflow:brightness:{value}"));
+}
+
 fn highlight(bounds: &Value) {
     let overlay = id("widget-highlight");
     let values = (0..4)
@@ -73,6 +82,8 @@ pub async fn select_rendered(id: &str) -> Result {
             .iter()
             .find(|node| node["id"] == id)?
             .clone();
+        stop(state);
+        controls(state);
         state.rendered.selected = id.into();
         state.widget.clear();
         state.pick_request += 1;
@@ -158,6 +169,7 @@ pub fn controls(state: &State) {
         "Pick widget in preview"
     };
     dom::disabled("inspect-preview", !state.inspect_ready);
+    crate::preview_canvas::render(state);
     dom::attr(&button, "title", title);
     dom::attr(
         &button,
@@ -175,6 +187,7 @@ pub fn initialize() {
             if state.inspecting {
                 stop(state);
             } else {
+                crate::preview_canvas::stop_pan(state);
                 state.inspecting = true;
                 highlight(&Value::Null);
                 send(state, "freeflow:inspect-on");
@@ -228,6 +241,7 @@ pub fn initialize() {
                 state::change(|state| {
                     if !state.inspect_ready {
                         state.inspect_ready = true;
+                        brightness(state);
                         if state.inspecting {
                             send(state, "freeflow:inspect-on");
                         }
@@ -240,6 +254,10 @@ pub fn initialize() {
                 });
             }
             "freeflow:tree" => update_tree(&message),
+            "freeflow:zoom" => crate::preview_canvas::wheel_from_preview(&message),
+            "freeflow:brightness-error" => {
+                dom::toast("Flutter could not change the preview brightness.", true)
+            }
             "freeflow:selection" => {
                 let context = state::change(|state| {
                     if !state.inspecting || !state.mode.shows_preview() {
