@@ -250,7 +250,7 @@ fn tools(editing: bool) -> Vec<Value> {
     let mut tools: Vec<_> = mcp::definitions().iter().filter_map(|tool| {
         let name = tool["name"].as_str()?;
         let allowed = match name {
-            "list_files" | "list_assets" | "read_file" | "inspect_widgets" | "read_widget_property" | "read_project_rules" | "read_app_logs" => true,
+            "list_files" | "list_assets" | "read_design_values" | "read_file" | "inspect_widgets" | "read_widget_property" | "read_project_rules" | "read_app_logs" => true,
             "write_file" | "edit_widget" => editing,
             _ => false,
         };
@@ -389,6 +389,11 @@ impl Workspace<'_> {
         if name == "list_assets" {
             let mut catalog = self.projects.asset_context(self.project, &input)?;
             catalog["pendingManifest"] = json!(self.pending.contains_key("pubspec.yaml"));
+            return Ok(catalog);
+        }
+        if name == "read_design_values" {
+            let mut catalog = crate::design_values::context(self.projects, self.project, &input)?;
+            catalog["pendingFiles"] = json!(self.pending.keys().collect::<Vec<_>>());
             return Ok(catalog);
         }
         let path = required(&input, "path")?;
@@ -593,6 +598,7 @@ async fn answer(
             let label = match call.name.as_str() {
                 "list_files"
                 | "list_assets"
+                | "read_design_values"
                 | "read_file"
                 | "inspect_widgets"
                 | "read_widget_property" => "Reading project",

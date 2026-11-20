@@ -3,6 +3,7 @@ mod archive;
 mod backends;
 mod components;
 mod deploy;
+mod design_values;
 mod devices;
 mod edits;
 mod files;

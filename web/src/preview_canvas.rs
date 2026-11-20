@@ -254,6 +254,18 @@ pub fn stop_pan(state: &mut State) {
     state.canvas.drag = None;
 }
 
+pub fn brightness(value: &str) {
+    if !matches!(value, "system" | "light" | "dark") {
+        return;
+    }
+    state::change(|state| {
+        state.canvas.brightness = value.into();
+        persist(state);
+        crate::preview_inspector::brightness(state);
+        render(state);
+    });
+}
+
 pub fn initialize() {
     let preferences = dom::win()
         .local_storage()
@@ -407,10 +419,6 @@ pub fn initialize() {
     });
     dom::listen(&dom::win(), "blur", |_| finish_drag());
     dom::listen(&id("preview-brightness"), "change", |_| {
-        state::change(|state| {
-            state.canvas.brightness = dom::value(&id("preview-brightness"));
-            persist(state);
-            crate::preview_inspector::brightness(state);
-        })
+        brightness(&dom::value(&id("preview-brightness")));
     });
 }

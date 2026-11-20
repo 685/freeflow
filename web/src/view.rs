@@ -288,6 +288,18 @@ fn file_rows(
 fn property(item: &Value) -> String {
     let name = string(&item["name"]);
     let mut tools = String::new();
+    let design_kind = match string(&item["type"]) {
+        "color" => "color",
+        "number" | "integer" => "number",
+        "spacing" => "insets",
+        "string" if name == "fontFamily" => "font",
+        _ if name == "style" => "typography",
+        _ if name.ends_with("borderRadius") => "radius",
+        _ => "",
+    };
+    if !design_kind.is_empty() && item["codeEditable"] == true && !item["conditional"].is_object() {
+        tools.push_str(&format!(r#"<button type="button" class="property-code" data-property-theme="{}" data-design-kind="{design_kind}" aria-label="Choose {} from Theme">{}Theme</button>"#,h(name),h(name),icon("palette",12)));
+    }
     if item["codeEditable"] == true {
         tools.push_str(&format!(r#"<button type="button" class="property-code" data-property-code="{}" aria-label="Edit {} as Dart" title="Edit Dart expression">{}Dart</button>"#, h(name), h(name), icon("code", 12)));
     }

@@ -109,6 +109,97 @@ pub async fn reset(name: String) -> Result {
         .await
 }
 
+pub async fn open_design_values(name: String, kind: String) -> Result {
+    let context = Context::capture().await?;
+    let mut catalog = dom::project_get(&context.project, "theme-values").await?;
+    if !context.current() {
+        return Ok(());
+    }
+    let entries: Vec<_> = items(&catalog["entries"])
+        .iter()
+        .filter(|entry| {
+            entry["constant"] == true
+                && (entry["path"] == context.path
+                    || entry["public"] == true && entry["part"] != true)
+        })
+        .cloned()
+        .collect();
+    catalog["entries"] = json!(entries);
+    let target = if name.is_empty() {
+        r#"<label class="form-field"><span>Property</span><input id="design-property" placeholder="style or decoration.borderRadius" maxlength="180" required></label>"#.to_owned()
+    } else {
+        String::new()
+    };
+    let body = format!(
+        r#"<div class="form">{target}{}<div class="design-values-list">{}</div><p id="design-empty" class="dialog-help" hidden>No matching reusable constants. Open App theme to edit or add design values.</p><p class="dialog-help">This adds a reference to the shared value and imports its file when needed.</p><div class="form-error" role="alert"></div></div>"#,
+        crate::design_values::controls("", &kind),
+        crate::design_values::rows(&catalog, true)
+    );
+    dialogs::open(
+        View::DesignPicker {
+            context,
+            name: name.clone(),
+            catalog,
+        },
+        "Use design value",
+        &format!(
+            "Set {} from a shared constant",
+            if name.is_empty() { "a property" } else { &name }
+        ),
+        body,
+    );
+    crate::design_values::filter();
+    Ok(())
+}
+
+pub async fn pick_design_value(
+    context: &Context,
+    name: &str,
+    catalog: &Value,
+    version: u64,
+    action: &str,
+) -> Result {
+    let Some(entry) = action
+        .strip_prefix("design-use-")
+        .and_then(|index| index.parse::<usize>().ok())
+        .and_then(|index| items(&catalog["entries"]).get(index))
+    else {
+        return Ok(());
+    };
+    let name = if name.is_empty() {
+        dom::find("#design-property")
+            .map(|field| dom::value(&field))
+            .unwrap_or_default()
+    } else {
+        name.into()
+    };
+    if name.trim().is_empty() {
+        return Err(Error::new("Enter the widget property to set."));
+    }
+    if !context.current() {
+        return Err(Error::new(
+            "Select the widget again before using this value.",
+        ));
+    }
+    if state::read(|state| {
+        state
+            .drafts
+            .contains_key(&state.draft_key(string(&entry["path"])))
+    }) {
+        return Err(Error::new(
+            "Save the theme file draft before using its values.",
+        ));
+    }
+    let result=dom::project_post(&context.project,"theme-binding",json!({"path":context.path,"revision":context.revision,"id":context.widget,"name":name.trim(),"valuePath":entry["path"],"valueRevision":entry["revision"],"valueId":entry["id"]})).await?;
+    if context.current() {
+        state::change(|state| state.widget = string(&result["widget"]).into());
+        crate::load_file(&context.path, true).await?;
+    }
+    dialogs::close_current(version);
+    dom::toast("Shared design value applied", false);
+    Ok(())
+}
+
 pub async fn open_assets(name: String, category: String) -> Result {
     let context = Context::capture().await?;
     let catalog = dom::project_get(&context.project, "assets").await?;
@@ -202,7 +293,7 @@ pub async fn open(name: String) -> Result {
         <label class="form-field"><span>Dart expression</span><textarea name="expression" rows="9" maxlength="65536" required {} placeholder="'Hello', 24, Colors.blue or () {{ … }}">{}</textarea></label>
         <p class="dialog-help">Use a dot to edit a value inside an existing constructor, such as style.letterSpacing. Changes join the project’s Undo history.</p>
         <div id="property-check" class="property-check" role="status"></div><div class="form-error" role="alert"></div>
-        <div class="form-footer"><button type="button" class="button outline" data-dialog-action="property-check">Check Dart</button><button type="button" class="button outline" data-dialog-action="property-remove" {}>Reset property</button><button type="submit" class="button primary">Save property</button></div>
+        <div class="form-footer"><button type="button" class="button outline" data-dialog-action="property-theme">Use design value</button><button type="button" class="button outline" data-dialog-action="property-check">Check Dart</button><button type="button" class="button outline" data-dialog-action="property-remove" {}>Reset property</button><button type="submit" class="button primary">Save property</button></div>
         </form>"#,
             h(&name),
             if adding { "autofocus" } else { "readonly" },
@@ -282,6 +373,9 @@ pub async fn act(context: &Context, version: u64, action: &str) -> Result {
         .map(|field| dom::value(&field))
         .unwrap_or_default();
     match action {
+        "property-theme" => {
+            open_design_values(name.trim().into(), String::new()).await?;
+        }
         "property-remove" => {
             context.save(&name, Value::Null, true).await?;
             dialogs::close_current(version);
@@ -357,7 +451,16 @@ pub fn initialize() {
         }
     });
     dom::listen(&id("inspector"), "click", |event| {
-        if let Some(element) = dom::closest(&event, "[data-property-asset]") {
+        if let Some(element) = dom::closest(&event, "[data-property-theme]") {
+            dom::spawn(open_design_values(
+                element
+                    .get_attribute("data-property-theme")
+                    .unwrap_or_default(),
+                element
+                    .get_attribute("data-design-kind")
+                    .unwrap_or_default(),
+            ));
+        } else if let Some(element) = dom::closest(&event, "[data-property-asset]") {
             dom::spawn(open_assets(
                 element
                     .get_attribute("data-property-asset")

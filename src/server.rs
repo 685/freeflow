@@ -1,5 +1,5 @@
 use crate::{
-    agent, backends, deploy, devices,
+    agent, backends, deploy, design_values, devices,
     files::{self, Problem, Result, Session},
     flutter::Flutter,
     git, inspector,
@@ -543,6 +543,16 @@ async fn project_route(
                 let source = projects.file(&project, &file)?;
                 json!({"path":source.path,"revision":source.revision,"apps":visual::themes(&source.content)?})
             }
+            "theme-values" => design_values::catalog(
+                projects,
+                &project,
+                &json!({"path":file,"kind":query(url,"kind"),"query":query(url,"query"),"since":query(url,"since")}),
+            )?,
+            "theme-value" => design_values::read(
+                projects,
+                &project,
+                &json!({"path":file,"id":query(url,"id"),"revision":query(url,"revision")}),
+            )?,
             "git" => git::state(&project).await?,
             "git-diff" => git::diff(projects, &project, &file).await?,
             "agent" => agent::state(jobs, &project)?,
@@ -678,6 +688,9 @@ async fn project_route(
                 })?;
                 (200, json!(source))
             }
+            "theme-values" => (200, design_values::write(projects, &project, &input)?),
+            "theme-value-check" => (200, design_values::check(jobs, &project, &input).await?),
+            "theme-binding" => (200, design_values::bind(projects, &project, &input)?),
             "inspect" => (200, inspector::resolve(projects, &project, &input)?),
             "editor" => (200, jobs.analyzers.editor(jobs, &project, &input).await?),
             "git" => (202, git::operation(jobs, project, &input)?),

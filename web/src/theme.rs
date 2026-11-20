@@ -57,6 +57,7 @@ fn render(project: &str, config: &Value, selected: &str) {
         <label class="form-field"><span>Dart file</span><select id="theme-file">{paths}</select></label>
         <button type="button" class="button outline small" data-dialog-action="theme-file">Open file theme</button>"#
     );
+    body.insert_str(0, r#"<div class="dialog-tabs"><button type="button" class="button soft small active">App settings</button><button type="button" class="button soft small" data-dialog-action="theme-values">Design values</button></div>"#);
     if let Some(app) = app {
         if choices.len() > 1 {
             let options: String = choices
@@ -125,6 +126,7 @@ fn render(project: &str, config: &Value, selected: &str) {
 
 pub async fn act(version: u64, config: &Value, action: &str) -> Result {
     match action {
+        "theme-values" => crate::design_values::open().await?,
         "theme-file" => open(Some(dom::value(&id("theme-file")))).await?,
         "theme-app" => {
             if current_view(version) {

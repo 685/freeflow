@@ -45,7 +45,11 @@ pub fn writing(route: &str, method: &str) -> Option<(String, u64)> {
     let (project, part) = route.strip_prefix("/projects/")?.split_once('/')?;
     if !matches!(
         (method, part),
-        ("PUT", "file") | ("POST", "widgets" | "theme" | "asset")
+        ("PUT", "file")
+            | (
+                "POST",
+                "widgets" | "theme" | "asset" | "theme-values" | "theme-binding"
+            )
     ) {
         return None;
     }

@@ -8,9 +8,11 @@ use std::{
 };
 
 mod components;
+mod design;
 mod properties;
 pub(crate) use components::Scope;
 pub(crate) use components::component_at;
+pub(crate) use design::{design_import, design_reference, design_values, edit_design_value};
 #[cfg(test)]
 pub use properties::{property_completion, property_details};
 pub(crate) use properties::{property_completion_in, property_details_in};
@@ -546,6 +548,14 @@ struct Node<'a> {
 }
 
 impl Node<'_> {
+    fn namespace(&self, tokens: &[Token<'_>]) -> String {
+        let first = self.start + usize::from(matches!(at(tokens, self.start), "const" | "new"));
+        if at(tokens, first + 1) == "." && at(tokens, first + 2) == self.kind {
+            format!("{}.", at(tokens, first))
+        } else {
+            String::new()
+        }
+    }
     fn slots(&self) -> &[(String, bool)] {
         if matches!(
             (self.kind, self.constructor),
@@ -662,6 +672,9 @@ fn property<'a>(node: &Node<'a>, item: &Field, tokens: &[Token<'a>]) -> Property
             let mut start = outer.expression;
             if matches!(at(tokens, start), "const" | "new") {
                 start += 1;
+            }
+            if at(tokens, start + 1) == "." && at(tokens, start + 2) == kind {
+                start += 2;
             }
             let open = start + 1;
             (at(tokens, start) == kind
@@ -867,7 +880,7 @@ fn describe_property(
             })
         });
     json!({
-        "editable": editable && (expression.is_none() || value.is_some() || constant),
+        "editable": item.kind!="expression" && editable && (expression.is_none() || value.is_some() || constant),
         "value": value,
         "expression": expression.map(|expr| expr.chars().take(200).collect::<String>()),
         "conditional": branch,

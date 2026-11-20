@@ -51,6 +51,21 @@ pub(crate) enum View {
         project: String,
         config: Value,
     },
+    DesignValues {
+        project: String,
+        generation: u64,
+        catalog: Value,
+    },
+    DesignValue {
+        project: String,
+        generation: u64,
+        entry: Value,
+    },
+    DesignPicker {
+        context: crate::property_panel::Context,
+        name: String,
+        catalog: Value,
+    },
     Ai {
         config: Value,
         client: String,
@@ -125,6 +140,35 @@ pub(crate) fn version() -> u64 {
 }
 pub(crate) fn current_view(version: u64) -> bool {
     dialog().open() && MODAL.with_borrow(|view| view.0 == version)
+}
+
+pub(crate) fn design_catalog_context() -> Option<(u64, String, u64, String)> {
+    if !dialog().open() {
+        return None;
+    }
+    MODAL.with_borrow(|(version, view)| match view {
+        View::DesignValues {
+            project,
+            generation,
+            catalog,
+        } => Some((
+            *version,
+            project.clone(),
+            *generation,
+            string(&catalog["version"]).into(),
+        )),
+        _ => None,
+    })
+}
+
+pub(crate) fn update_design_catalog(version: u64, next: Value) {
+    MODAL.with_borrow_mut(|(current, view)| {
+        if *current == version {
+            if let View::DesignValues { catalog, .. } = view {
+                *catalog = next;
+            }
+        }
+    });
 }
 
 pub(crate) fn showing_devices(project: &str) -> bool {
@@ -1012,7 +1056,7 @@ fn search(term: &str) {
     );
 }
 
-fn form_data(form: &Element) -> Value {
+pub(crate) fn form_data(form: &Element) -> Value {
     let mut data = Map::new();
     if let Ok(fields) = form.query_selector_all("[name]") {
         for index in 0..fields.length() {
@@ -1043,6 +1087,11 @@ fn form_data(form: &Element) -> Value {
 
 async fn submit_view(view: View, version: u64, mut input: Value) -> Result {
     match view {
+        View::DesignValue {
+            project,
+            generation,
+            entry,
+        } => crate::design_values::save(&project, generation, &entry, version, input).await?,
         View::WidgetProperty { context } => {
             crate::property_panel::submit(&context, version, input).await?
         }
@@ -1138,6 +1187,27 @@ async fn submit_view(view: View, version: u64, mut input: Value) -> Result {
 
 async fn act(view: View, version: u64, action: &str, element: &Element) -> Result {
     match view {
+        View::DesignValues {
+            project,
+            generation,
+            catalog,
+        } => crate::design_values::act(&project, generation, &catalog, version, action).await?,
+        View::DesignValue {
+            project,
+            generation,
+            entry,
+        } => {
+            crate::design_values::value_action(&project, generation, &entry, version, action)
+                .await?
+        }
+        View::DesignPicker {
+            context,
+            name,
+            catalog,
+        } => {
+            crate::property_panel::pick_design_value(&context, &name, &catalog, version, action)
+                .await?
+        }
         View::AssetPicker {
             context,
             name,

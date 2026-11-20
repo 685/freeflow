@@ -1,5 +1,21 @@
 [
   {
+    "name": "read_design_values",
+    "description": "Find saved top-level and static design values in lib Dart files: colors, TextStyle typography, numbers, EdgeInsets, BorderRadius and font family strings. Returns up to 200 names, paths, source revisions and expression excerpts. Filter by query, kind or path. This is a bounded syntax index; arbitrary dynamic theme expressions may require reading their Dart source.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "projectId": { "type": "string" },
+        "path": { "type": "string" },
+        "query": { "type": "string" },
+        "kind": { "enum": ["color", "typography", "number", "insets", "radius", "font"] }
+      },
+      "required": [],
+      "additionalProperties": false
+    },
+    "annotations": { "readOnlyHint": true, "openWorldHint": false }
+  },
+  {
     "name": "list_assets",
     "description": "List up to 200 app assets with their project-relative paths, media categories, sizes, Flutter registration and font family names from saved pubspec.yaml. Filter by query or category when truncated. Use existing paths or font families when editing Flutter widgets; binary files are not returned as text.",
     "inputSchema": {

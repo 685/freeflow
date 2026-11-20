@@ -23,6 +23,265 @@ fn fixture() -> (tempfile::TempDir, projects::Projects, projects::Project) {
     (home, projects, project)
 }
 
+const DESIGN_SOURCE: &str = "// 😀 Theme values\r\nimport 'package:flutter/material.dart' as f;\r\nconst baseSize = 8.0, largeSize = 24.0;\r\nclass AppDesign {\r\n  static const brand = f.Color(0xff112233);\r\n  static const translucent = f.Color(0x80112233);\r\n  static const heading = f.TextStyle(fontSize: 18, color: brand, decoration: f.TextDecoration.underline);\r\n  static const pagePadding = f.EdgeInsets.symmetric(horizontal: 16, vertical: 8);\r\n  static const corners = f.BorderRadius.only(topLeft: f.Radius.circular(/* keep radius */ 4));\r\n  static const fontFamily = 'Body';\r\n  static const _private = f.Color(0xff445566);\r\n  final instanceOnly = 15.0;\r\n  static f.Color get derived => brand;\r\n  void helper() { const localOnly = 99.0; }\r\n}\r\nvoid helper() { const localColor = f.Color(0xff000000); }\r\nconst words = 'Color(0xff123456)';\r\n";
+
+#[test]
+fn design_values_index_only_top_level_and_static_declarations_and_preserve_other_style_fields() {
+    let values = visual::design_values(DESIGN_SOURCE).unwrap();
+    let values = values.as_array().unwrap();
+    assert_eq!(values.len(), 10, "{values:?}");
+    assert!(
+        values
+            .iter()
+            .all(|value| !value["name"].as_str().unwrap().contains("Only")
+                && value["name"] != "localColor")
+    );
+    assert_eq!(
+        values
+            .iter()
+            .find(|value| value["name"] == "AppDesign.brand")
+            .unwrap()["value"],
+        "#112233"
+    );
+    assert_eq!(
+        values
+            .iter()
+            .find(|value| value["name"] == "AppDesign.translucent")
+            .unwrap()["value"],
+        "#80112233"
+    );
+    assert_eq!(
+        values
+            .iter()
+            .find(|value| value["name"] == "AppDesign.derived")
+            .unwrap()["constant"],
+        false
+    );
+    let heading = values
+        .iter()
+        .find(|value| value["name"] == "AppDesign.heading")
+        .unwrap();
+    let changed = visual::edit_design_value(
+        DESIGN_SOURCE,
+        &json!({"id":heading["id"],"fields":{"fontSize":"30","fontWeight":"w600","color":""}}),
+    )
+    .unwrap();
+    assert!(changed.contains("fontSize: 30, color: brand, decoration: f.TextDecoration.underline"));
+    assert!(changed.contains("fontWeight: f.FontWeight.w600"));
+    let brand = values
+        .iter()
+        .find(|value| value["name"] == "AppDesign.brand")
+        .unwrap();
+    let changed = visual::edit_design_value(
+        DESIGN_SOURCE,
+        &json!({"id":brand["id"],"fields":{"value":"#c0abcdef"}}),
+    )
+    .unwrap();
+    assert!(changed.contains("brand = f.Color(0xc0abcdef)"));
+    assert!(changed.contains("// 😀 Theme values\r\n"));
+}
+
+#[test]
+fn design_value_layout_edits_preserve_constructor_shape_comments_and_unsafe_expression_guards() {
+    let radius = "final corners = BorderRadius.circular(4);";
+    let entry = visual::design_values(radius).unwrap();
+    assert!(
+        visual::edit_design_value(
+            radius,
+            &json!({"id":entry[0]["id"],"fields":{"value":"-1"}})
+        )
+        .is_err()
+    );
+    let values = visual::design_values(DESIGN_SOURCE).unwrap();
+    let padding = values
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|value| value["name"] == "AppDesign.pagePadding")
+        .unwrap();
+    let changed = visual::edit_design_value(
+        DESIGN_SOURCE,
+        &json!({"id":padding["id"],"fields":{"horizontal":"22"}}),
+    )
+    .unwrap();
+    assert!(changed.contains("f.EdgeInsets.symmetric(horizontal: 22, vertical: 8)"));
+    let corner = values
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|value| value["name"] == "AppDesign.corners")
+        .unwrap();
+    let changed = visual::edit_design_value(
+        DESIGN_SOURCE,
+        &json!({"id":corner["id"],"fields":{"topLeft":"12","bottomRight":"16"}}),
+    )
+    .unwrap();
+    assert!(changed.contains("f.Radius.circular(/* keep radius */ 12)"));
+    assert!(changed.contains("bottomRight: f.Radius.circular(16)"));
+    assert!(
+        visual::edit_design_value(
+            DESIGN_SOURCE,
+            &json!({"id":corner["id"],"fields":{"bottomRight":"-1"}})
+        )
+        .is_err()
+    );
+    assert!(visual::edit_design_value(DESIGN_SOURCE,&json!({"id":padding["id"],"mode":"expression","expression":"f.EdgeInsets.all(4)); destroy(); x("})).is_err());
+}
+
+#[test]
+fn design_binding_import_and_value_edit_are_reversible_and_check_both_revisions() {
+    let (_home, projects, project) = fixture();
+    fs::write(project.root.join("lib/theme.dart"), DESIGN_SOURCE).unwrap();
+    let main = "// 😀\r\nimport 'package:flutter/material.dart';\r\nconst freeflowTheme = 3;\r\nWidget build() => const Text('Use theme');\r\n";
+    fs::write(project.root.join("lib/main.dart"), main).unwrap();
+    let tree = server::read_widgets(&projects, &project, "lib/main.dart").unwrap();
+    let node = &tree["nodes"][0];
+    let values = design_values::catalog(
+        &projects,
+        &project,
+        &json!({"path":"lib/theme.dart","kind":"typography"}),
+    )
+    .unwrap();
+    let value = &values["entries"][0];
+    let request = json!({"path":"lib/main.dart","revision":tree["revision"],"id":node["id"],"name":"style","valuePath":"lib/theme.dart","valueRevision":value["revision"],"valueId":value["id"]});
+    let bound = design_values::bind(&projects, &project, &request).unwrap();
+    assert!(
+        bound["source"]["content"]
+            .as_str()
+            .unwrap()
+            .contains("import \"package:example_app/theme.dart\" as freeflowTheme2;\r\n")
+    );
+    assert!(
+        bound["source"]["content"]
+            .as_str()
+            .unwrap()
+            .contains("style: freeflowTheme2.AppDesign.heading")
+    );
+    assert_eq!(
+        server::read_widgets(&projects, &project, "lib/main.dart").unwrap()["nodes"][0]["id"],
+        bound["widget"]
+    );
+    let history = projects.edit_history(&project);
+    projects
+        .replay_edit(&project, "undo", history["revision"].as_str().unwrap())
+        .unwrap();
+    assert_eq!(
+        projects.file(&project, "lib/main.dart").unwrap().content,
+        main
+    );
+    let edit = json!({"path":"lib/theme.dart","revision":value["revision"],"id":value["id"],"fields":{"fontSize":"32"}});
+    design_values::write(&projects, &project, &edit).unwrap();
+    assert_eq!(
+        design_values::bind(&projects, &project, &request)
+            .unwrap_err()
+            .status,
+        409
+    );
+    assert_eq!(
+        projects.file(&project, "lib/main.dart").unwrap().content,
+        main
+    );
+    assert_eq!(
+        design_values::write(&projects, &project, &edit)
+            .unwrap_err()
+            .status,
+        409
+    );
+}
+
+#[test]
+fn design_references_reuse_import_aliases_and_reject_private_values_parts_and_traversal() {
+    let (_home, projects, project) = fixture();
+    fs::write(project.root.join("lib/theme.dart"), DESIGN_SOURCE).unwrap();
+    let main = "import 'package:flutter/material.dart';\nimport 'theme.dart' as styles;\nWidget build() => Text('Use theme');\n";
+    fs::write(project.root.join("lib/main.dart"), main).unwrap();
+    let tree = server::read_widgets(&projects, &project, "lib/main.dart").unwrap();
+    let values = design_values::catalog(
+        &projects,
+        &project,
+        &json!({"path":"lib/theme.dart","kind":"color"}),
+    )
+    .unwrap();
+    let value = values["entries"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|value| value["name"] == "AppDesign.brand")
+        .unwrap();
+    let mut input = json!({"path":"lib/main.dart","revision":tree["revision"],"id":tree["nodes"][0]["id"],"name":"color","valuePath":"lib/theme.dart","valueRevision":value["revision"],"valueId":value["id"]});
+    let private = values["entries"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|value| value["name"] == "AppDesign._private")
+        .unwrap();
+    input["valueId"] = private["id"].clone();
+    assert_eq!(
+        design_values::bind(&projects, &project, &input)
+            .unwrap_err()
+            .status,
+        422
+    );
+    input["valueId"] = value["id"].clone();
+    let result = design_values::bind(&projects, &project, &input).unwrap();
+    let text = result["source"]["content"].as_str().unwrap();
+    assert!(text.contains("color: styles.AppDesign.brand"));
+    assert!(!text.contains("freeflowTheme"));
+    assert!(
+        design_values::read(
+            &projects,
+            &project,
+            &json!({"path":"../outside.dart","id":"0"})
+        )
+        .is_err()
+    );
+    assert!(
+        visual::design_import(
+            "part of 'main.dart';\nWidget build() => Text('part');",
+            &["theme.dart".into()],
+            "AppDesign.brand"
+        )
+        .is_err()
+    );
+}
+
+#[test]
+fn design_binding_creates_nested_text_styles_in_the_widgets_import_namespace() {
+    let (_home, projects, project) = fixture();
+    fs::write(project.root.join("lib/theme#dark.dart"), DESIGN_SOURCE).unwrap();
+    fs::write(
+        project.root.join("lib/main.dart"),
+        "import 'package:flutter/material.dart' as f;\nWidget build()=>const f.Text('Prefix');\n",
+    )
+    .unwrap();
+    let values = design_values::catalog(
+        &projects,
+        &project,
+        &json!({"path":"lib/theme#dark.dart","kind":"color","query":"brand"}),
+    )
+    .unwrap();
+    let value = &values["entries"][0];
+    let tree = server::read_widgets(&projects, &project, "lib/main.dart").unwrap();
+    let result=design_values::bind(&projects,&project,&json!({"path":"lib/main.dart","revision":tree["revision"],"id":tree["nodes"][0]["id"],"name":"color","valuePath":value["path"],"valueId":value["id"],"valueRevision":value["revision"]})).unwrap();
+    let content = result["source"]["content"].as_str().unwrap();
+    assert!(
+        content.contains("style: f.TextStyle(color: freeflowTheme.AppDesign.brand)"),
+        "{content}"
+    );
+    assert!(content.contains("theme%23dark.dart"));
+    let tree = server::read_widgets(&projects, &project, "lib/main.dart").unwrap();
+    let color = tree["nodes"][0]["properties"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|value| value["name"] == "color")
+        .unwrap();
+    assert_eq!(color["expression"], "freeflowTheme.AppDesign.brand");
+    assert!(
+        design_values::catalog(&projects, &project, &json!({"path":"../outside.dart"})).is_err()
+    );
+}
+
 #[test]
 fn uploaded_assets_and_pubspec_undo_together_without_losing_existing_yaml() {
     use base64::Engine as _;

@@ -27,11 +27,11 @@ pub(crate) struct Scope {
 }
 
 pub(super) struct Class {
-    name: String,
+    pub(super) name: String,
     base: String,
     name_token: usize,
-    open: usize,
-    close: usize,
+    pub(super) open: usize,
+    pub(super) close: usize,
     argument: Option<(String, usize)>,
 }
 

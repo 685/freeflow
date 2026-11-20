@@ -1,6 +1,7 @@
 mod agent_panel;
 mod asset_panel;
 mod component_panel;
+mod design_values;
 mod device_panel;
 mod dialogs;
 mod dom;
@@ -1093,6 +1094,7 @@ fn start() -> std::result::Result<(), JsValue> {
     property_panel::initialize();
     component_panel::initialize();
     asset_panel::initialize();
+    design_values::initialize();
     ui::click("run-device", || ui::spawn(device_panel::open()));
     planner::initialize();
     ui::click("app-theme", || ui::spawn(theme::open(None)));

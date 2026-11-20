@@ -68,7 +68,7 @@ fn target<'a>(node: &Node<'a>, tokens: &[Token<'a>], name: &str) -> Result<Targe
                         args: arguments,
                         arg: None,
                         name: Some(parts[1].into()),
-                        create: Some((outer.clone(), kind.clone())),
+                        create: Some((outer.clone(), format!("{}{kind}", node.namespace(tokens)))),
                     });
                 }
             }
@@ -196,7 +196,7 @@ pub(crate) fn property_completion_in(
     Ok((text, cursor))
 }
 
-fn expression(value: &Value) -> Result<String> {
+pub(super) fn expression(value: &Value) -> Result<String> {
     let code = value
         .as_str()
         .map(str::trim)

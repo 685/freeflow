@@ -136,6 +136,8 @@
           "type": "string",
           "asset": "fonts",
           "nest": ["style", "TextStyle"]
+        },
+        { "name": "style", "type": "expression"
         }
       ]
     },
