@@ -522,6 +522,16 @@ async fn project_route(
             "git" => git::state(&project).await?,
             "git-diff" => git::diff(projects, &project, &file).await?,
             "agent" => agent::state(jobs, &project)?,
+            "project-rules" => {
+                crate::project_rules::load(&project, (!file.is_empty()).then_some(file.as_str()))?
+            }
+            "app-logs" => {
+                let target = query(url, "target");
+                jobs.app_logs(
+                    &project,
+                    &json!({"target":if target.is_empty() { "latest" } else { &target }}),
+                )?
+            }
             "history" => json!(projects.history(&project, &file)?),
             "edits" => projects.edit_history(&project),
             "history-version" => projects.history_version(&project, &file, &query(url, "id"))?,
@@ -569,6 +579,7 @@ async fn project_route(
         let (code, value) = match part {
             "widgets" => (200, write_widgets(projects, &project, &input)?),
             "widget-snippet" => (200, widget_snippet(projects, &project, &input)?),
+            "preview-logs" => (200, jobs.preview_logs(&project, &input)?),
             "edits" => (
                 200,
                 projects.replay_edit(

@@ -178,7 +178,7 @@ pub fn is_text(name: &str) -> bool {
     TEXT.is_match(name)
         || matches!(
             name,
-            "Podfile" | "Gemfile" | ".metadata" | "LICENSE" | "README"
+            "Podfile" | "Gemfile" | ".metadata" | ".cursorrules" | "LICENSE" | "README"
         )
 }
 
@@ -208,7 +208,8 @@ pub fn visible_name(name: &str) -> bool {
         | "ephemeral"
         | ".settings"
         | ".vscode" => false,
-        ".gitignore" | ".metadata" | ".gitattributes" | ".github" | ".env.example" => true,
+        ".gitignore" | ".metadata" | ".gitattributes" | ".github" | ".env.example"
+        | ".cursorrules" => true,
         _ => !name.starts_with('.') && !PRIVATE.is_match(name),
     }
 }

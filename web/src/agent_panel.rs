@@ -219,13 +219,54 @@ fn close() {
     }
 }
 
-fn settings(project: &str) {
-    let (provider, rules) = state::read(|state| {
+async fn settings(project: String) -> Result {
+    let (provider, rules, path, generation) = state::read(|state| {
         (
             state.agent["provider"].clone(),
             string(&state.agent["rules"]).to_owned(),
+            state.current_file().to_owned(),
+            state.generation,
         )
     });
+    let sources = project_get(
+        &project,
+        &format!("project-rules{}", dom::path_query(&path)),
+    )
+    .await?;
+    if !state::read(|state| {
+        state.project_id() == project
+            && state.generation == generation
+            && state.current_file() == path
+    }) {
+        return Ok(());
+    }
+    let mut loaded = String::new();
+    for file in items(&sources["files"]) {
+        loaded.push_str(&format!(
+            "<li><code>{}</code> · {}</li>",
+            h(string(&file["path"])),
+            if file["truncated"] == true {
+                "Excerpt loaded"
+            } else {
+                "Loaded"
+            }
+        ));
+    }
+    for file in items(&sources["skipped"]) {
+        loaded.push_str(&format!(
+            "<li><code>{}</code> · Skipped: {}</li>",
+            h(string(&file["path"])),
+            h(string(&file["reason"]))
+        ));
+    }
+    if loaded.is_empty() {
+        loaded.push_str("<li>No rule files found for the selected file.</li>");
+    }
+    if let Some(count) = sources["omittedFiles"].as_u64().filter(|count| *count > 0) {
+        loaded.push_str(&format!(
+            "<li>{count} additional rule files omitted from this excerpt.</li>"
+        ));
+    }
     dialogs::open(
         View::AgentSettings {
             project: project.into(),
@@ -238,7 +279,8 @@ fn settings(project: &str) {
               <label class="form-field"><span>Model</span><input name="model" required value="{}" placeholder="Model name"></label>
               <label class="form-field"><span>API key</span><input name="apiKey" type="password" autocomplete="off" placeholder="{}"></label>
               {}
-              <label class="form-field"><span>Project rules</span><textarea name="rules" rows="4" maxlength="8000">{}</textarea></label>
+              <div class="form-field"><span>Project rule files</span><p class="muted">Root rules and rules in the selected file’s folders load automatically from AGENTS.md, CLAUDE.md, ARCHITECTURE.md and .cursorrules.</p><ul>{}</ul></div>
+              <label class="form-field"><span>Additional project instructions</span><textarea name="rules" rows="4" maxlength="8000">{}</textarea></label>
               <div class="form-error" role="alert"></div>
               <div class="form-footer"><button type="submit" class="button primary">Save settings</button></div>
             </form>"#,
@@ -256,9 +298,11 @@ fn settings(project: &str) {
             } else {
                 ""
             },
+            loaded,
             h(&rules)
         ),
     );
+    Ok(())
 }
 
 pub async fn save_settings(project: &str, version: u64, input: Value) -> Result {
@@ -298,8 +342,7 @@ async fn send() -> Result {
         return Ok(());
     }
     if !state::read(|state| state.agent["provider"]["configured"] == true) {
-        settings(&project);
-        return Ok(());
+        return settings(project).await;
     }
     let prompt = dom::value(&id("agent-prompt")).trim().to_owned();
     if prompt.is_empty() {
@@ -463,7 +506,7 @@ pub fn initialize() {
     dom::click("agent-close", close);
     dom::click("agent-settings", || {
         if let Ok(project) = crate::project_id() {
-            settings(&project);
+            dom::spawn(settings(project));
         }
     });
     dom::click("agent-new", || {
@@ -500,7 +543,7 @@ pub fn initialize() {
         match button.get_attribute("data-agent").as_deref() {
             Some("configure") => {
                 if let Ok(project) = crate::project_id() {
-                    settings(&project);
+                    dom::spawn(settings(project));
                 }
             }
             Some("undo") => {

@@ -1,4 +1,5 @@
 // Freeflow generates this entrypoint in .dart_tool for a debug preview.
+import 'dart:async';
 import 'dart:convert';
 import 'dart:js_interop';
 import 'dart:ui' show Brightness;
@@ -47,7 +48,23 @@ extension type _BrowserMessage(JSObject _) implements JSObject {
   external JSAny? get data;
 }
 
-Future<void> main(List<String> args) async {
+Future<void> main(List<String> args) => runZoned(
+  () => _start(args),
+  zoneSpecification: ZoneSpecification(print: (self, parent, zone, line) {
+    parent.print(zone, line);
+    if (_origin.isEmpty || _window.strictEquals(_window.parent).toDart) return;
+    _window.parent.postMessage(
+      jsonEncode({
+        'type': 'freeflow:app-log',
+        'frame': Uri.base.queryParameters['freeflow'] ?? '',
+        'message': String.fromCharCodes(line.runes.take(4000)),
+      }).toJS,
+      _origin.toJS,
+    );
+  }),
+);
+
+Future<void> _start(List<String> args) async {
   final frame = Uri.base.queryParameters['freeflow'] ?? '';
   final Function entrypoint = app.main;
   final result = Function.apply(

@@ -135,6 +135,7 @@ fn update_tree(message: &Value) {
 }
 
 pub fn reset(state: &mut State, keep_enabled: bool) {
+    crate::preview_logs::reset();
     state.inspect_ready = false;
     state.inspecting &= keep_enabled;
     state.pick_request += 1;
@@ -254,6 +255,7 @@ pub fn initialize() {
                 });
             }
             "freeflow:tree" => update_tree(&message),
+            "freeflow:app-log" => crate::preview_logs::enqueue(&message),
             "freeflow:zoom" => crate::preview_canvas::wheel_from_preview(&message),
             "freeflow:brightness-error" => {
                 dom::toast("Flutter could not change the preview brightness.", true)

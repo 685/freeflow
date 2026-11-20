@@ -1,5 +1,36 @@
 [
   {
+    "name": "read_project_rules",
+    "description": "Read applicable AGENTS.md, CLAUDE.md, ARCHITECTURE.md and .cursorrules files. Root rules apply to the project; rules in ancestor directories of path are returned from broadest to closest scope. Large files return marked excerpts. Read this before creating files.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "projectId": { "type": "string", "description": "Project ID from list_projects. Omit on a project-scoped connection." },
+        "path": { "type": "string", "description": "Optional project-relative file path, including a file that does not exist yet. Omit to read root rules." }
+      },
+      "required": [],
+      "additionalProperties": false
+    },
+    "annotations": { "readOnlyHint": true, "openWorldHint": false }
+  },
+  {
+    "name": "read_app_logs",
+    "description": "Read up to the latest 200 lines from this project's preview, device, build, analysis or test command. Debug preview logs include Dart print/debugPrint and framework output while the preview is open in Freeflow. Select target or a jobId; after resumes using nextAfter from the same job. No matching command returns job:null. Excerpts are bounded and may be truncated.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "projectId": { "type": "string", "description": "Project ID from list_projects. Omit on a project-scoped connection." },
+        "target": { "enum": ["latest", "preview", "device", "build"], "description": "Defaults to the most recently started app-related command." },
+        "jobId": { "type": "string", "description": "Optional specific command ID, overriding target." },
+        "after": { "type": "integer", "minimum": 0 },
+        "limit": { "type": "integer", "minimum": 1, "maximum": 200 }
+      },
+      "required": [],
+      "additionalProperties": false
+    },
+    "annotations": { "readOnlyHint": true, "openWorldHint": false }
+  },
+  {
     "name": "edit_history",
     "description": "Read the next saved project edit available for Undo and Redo, and its history revision. History is kept while Freeflow is running.",
     "inputSchema": {

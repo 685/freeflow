@@ -38,6 +38,10 @@ Open **Agent → Agent settings** and enter your OpenAI-compatible Chat Completi
 
 The Agent streams replies and receives the active file and selected widget as context. **Ask** reads project files. **Edit files** can apply Dart and configuration edits. Use **Restore checkpoint** to undo a set of Agent edits while their file revisions still match.
 
+Project rule files load automatically from **AGENTS.md**, **CLAUDE.md**, **ARCHITECTURE.md** and **.cursorrules**. Root files apply throughout the project; rules in the selected file's ancestor folders provide more specific context. Reading another file also loads its applicable rules. **Agent settings** lists the loaded files and keeps your additional project instructions. Large rule files are shown to the Agent as marked excerpts.
+
+The Agent and connected MCP clients can use **read_project_rules** for an existing or planned file, and **read_app_logs** for the latest preview, device, build, analysis or test output. App logs return up to 200 recent lines with a cursor for later messages. While a compatible debug preview is open in Freeflow, Dart **print**, **debugPrint** and Flutter framework error output are forwarded to its console log. These read tools are available in **Ask** as well as **Edit files**.
+
 Open a project and select **AI Connect**. It generates project-scoped setup commands for **Codex**, **Claude Code** and **Claude Desktop**. Your client can edit project files, work with the visual widget tree, and run previews, analysis and builds. The MCP server uses standard STDIO for other local MCP clients as well.
 
 Use **cargo run --locked -p freeflow-build -- --no-open** to run Freeflow without opening a browser. The **AI Connect** dialog generates commands for the native **freeflow mcp** executable. Start Freeflow first and pass the same **--home** to both processes if you use a custom data folder. Existing MCP clients need the updated command from **AI Connect**. Use Codex for ChatGPT-based local development. The [ChatGPT web app's MCP integration](https://help.openai.com/en/articles/12584461) connects to remote servers.

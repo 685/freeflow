@@ -8,6 +8,7 @@ mod phone_preview;
 mod planner;
 mod preview_canvas;
 mod preview_inspector;
+mod preview_logs;
 mod saved_edits;
 mod source_control;
 mod state;

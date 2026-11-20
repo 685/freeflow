@@ -24,6 +24,91 @@ fn fixture() -> (tempfile::TempDir, projects::Projects, projects::Project) {
 }
 
 #[test]
+fn project_rules_follow_file_scope_and_remain_visible_to_the_editor() {
+    let (_home, projects, project) = fixture();
+    fs::create_dir_all(project.root.join("lib/features")).unwrap();
+    fs::create_dir_all(project.root.join("lib/other")).unwrap();
+    for (path, text) in [
+        ("AGENTS.md", "Use Flutter."),
+        ("CLAUDE.md", "Keep app state local."),
+        (".cursorrules", "Use Dart formatting."),
+        ("lib/AGENTS.md", "Prefer widgets."),
+        (
+            "lib/features/ARCHITECTURE.md",
+            "Feature-specific convention.",
+        ),
+        ("lib/other/AGENTS.md", "Unrelated rule."),
+    ] {
+        fs::write(project.root.join(path), text).unwrap();
+    }
+    let root = project_rules::load(&project, None).unwrap();
+    assert_eq!(root["files"].as_array().unwrap().len(), 3);
+    let rules = project_rules::load(&project, Some("lib/features/new.dart")).unwrap();
+    let paths: Vec<_> = rules["files"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|rule| rule["path"].as_str().unwrap())
+        .collect();
+    assert_eq!(
+        paths,
+        [
+            "AGENTS.md",
+            "CLAUDE.md",
+            ".cursorrules",
+            "lib/AGENTS.md",
+            "lib/features/ARCHITECTURE.md"
+        ]
+    );
+    assert_eq!(rules["files"][4]["scope"], "lib/features");
+    assert_eq!(rules["truncated"], false);
+    assert!(rules["skipped"].as_array().unwrap().is_empty());
+    assert!(projects.file(&project, ".cursorrules").is_ok());
+    assert!(
+        projects
+            .tree(&project)
+            .unwrap()
+            .entries
+            .iter()
+            .any(|entry| entry.path == ".cursorrules")
+    );
+    for path in [
+        "../outside.dart",
+        "lib/../../outside.dart",
+        ".env",
+        "lib\\main.dart",
+    ] {
+        assert!(project_rules::load(&project, Some(path)).is_err());
+    }
+}
+
+#[test]
+fn project_rules_bound_unicode_excerpts_and_skip_non_text_files() {
+    let (_home, _projects, project) = fixture();
+    fs::write(project.root.join("AGENTS.md"), "🦀".repeat(20_000)).unwrap();
+    fs::write(project.root.join("CLAUDE.md"), [0xff, 0xfe, 0]).unwrap();
+    let rules = project_rules::load(&project, None).unwrap();
+    assert_eq!(rules["files"].as_array().unwrap().len(), 1);
+    assert_eq!(rules["files"][0]["truncated"], true);
+    assert!(rules["files"][0]["revision"].is_null());
+    assert!(rules["files"][0]["content"].as_str().unwrap().len() <= 16 * 1024);
+    assert_eq!(rules["skipped"][0]["path"], "CLAUDE.md");
+    assert_eq!(rules["truncated"], true);
+}
+
+#[cfg(unix)]
+#[test]
+fn project_rules_never_follow_symbolic_links() {
+    let (home, _projects, project) = fixture();
+    let outside = home.path().join("private.md");
+    fs::write(&outside, "outside project").unwrap();
+    std::os::unix::fs::symlink(outside, project.root.join("AGENTS.md")).unwrap();
+    let rules = project_rules::load(&project, None).unwrap();
+    assert!(rules["files"].as_array().unwrap().is_empty());
+    assert_eq!(rules["skipped"][0]["path"], "AGENTS.md");
+}
+
+#[test]
 fn live_inspector_prefers_the_matching_widget_column_and_project() {
     let (_home, projects, project) = fixture();
     let path = "lib/main.dart";

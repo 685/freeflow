@@ -94,13 +94,58 @@ impl Job {
             "log":state.lines.iter().filter(|line| line.id > after).collect::<Vec<_>>() })
     }
 
+    fn app_logs(&self, after: u64, limit: usize) -> Value {
+        let state = self.state.lock().unwrap();
+        let mut lines = vec![];
+        let mut bytes = 0;
+        let mut truncated = state
+            .lines
+            .front()
+            .is_some_and(|line| line.id > after.saturating_add(1));
+        for line in state
+            .lines
+            .iter()
+            .rev()
+            .filter(|line| line.id > after)
+            .take(limit)
+        {
+            let remaining = (64 * 1024usize).saturating_sub(bytes);
+            let end = line
+                .message
+                .char_indices()
+                .map(|(index, ch)| index + ch.len_utf8())
+                .take_while(|end| *end <= remaining)
+                .last()
+                .unwrap_or(0);
+            if end > 0 {
+                lines.push(Line {
+                    id: line.id,
+                    message: line.message[..end].into(),
+                });
+                bytes += end;
+            }
+            if end < line.message.len() {
+                truncated = true;
+                break;
+            }
+        }
+        lines.reverse();
+        truncated |= state.lines.iter().filter(|line| line.id > after).count() > lines.len();
+        json!({"job":{"id":self.id,"kind":self.kind,"status":state.status,"startedAt":self.started,
+            "endedAt":state.ended,"error":state.error.as_ref().map(|text| text.chars().take(2000).collect::<String>())},
+            "nextAfter":lines.last().map_or(after, |line| line.id),"lines":lines,"truncated":truncated})
+    }
+
     pub fn log(&self, line: impl AsRef<str>) {
-        let clean = ANSI.replace_all(line.as_ref(), "");
+        Self::append_log(&mut self.state.lock().unwrap(), line.as_ref());
+    }
+
+    fn append_log(state: &mut JobState, line: &str) {
+        let clean = ANSI.replace_all(line, "");
         if clean.is_empty() {
             return;
         }
         let message = clean.chars().take(6000).collect();
-        let mut state = self.state.lock().unwrap();
         state.sequence += 1;
         let id = state.sequence;
         state.lines.push_back(Line { id, message });
@@ -451,6 +496,112 @@ impl Jobs {
             ));
         }
         Ok(job.view(after))
+    }
+
+    pub fn app_logs(&self, project: &Project, input: &Value) -> Result<Value> {
+        let target = input["target"].as_str().unwrap_or("latest");
+        if !matches!(target, "latest" | "preview" | "device" | "build") {
+            return Err(Problem::new(
+                400,
+                "Choose preview, device, build or latest logs.",
+            ));
+        }
+        let limit = input.get("limit").map_or(Ok(200), |value| {
+            value
+                .as_u64()
+                .filter(|limit| (1..=200).contains(limit))
+                .map(|limit| limit as usize)
+                .ok_or_else(|| Problem::new(400, "Choose between 1 and 200 log lines."))
+        })?;
+        let after = input.get("after").map_or(Ok(0), |value| {
+            value
+                .as_u64()
+                .ok_or_else(|| Problem::new(400, "Use a log cursor from an earlier result."))
+        })?;
+        let allowed = |kind: &str| {
+            matches!(
+                kind,
+                "preview"
+                    | "phone-preview"
+                    | "device"
+                    | "analyze"
+                    | "test"
+                    | "format"
+                    | "dependencies"
+                    | "create"
+            ) || kind.starts_with("export-")
+        };
+        let job = if let Some(id) = input["jobId"].as_str() {
+            let job = self.get_job(id)?;
+            if job.project_id.as_deref() != Some(&project.id) {
+                return Err(Problem::new(
+                    403,
+                    "That command belongs to another project.",
+                ));
+            }
+            if !allowed(&job.kind) {
+                return Err(Problem::new(
+                    400,
+                    "Choose an app, build, analysis or test command.",
+                ));
+            }
+            Some(job)
+        } else {
+            let queue = self.queue.lock().unwrap();
+            queue
+                .order
+                .iter()
+                .rev()
+                .filter_map(|id| queue.jobs.get(id))
+                .find(|job| {
+                    job.project_id.as_deref() == Some(&project.id)
+                        && allowed(&job.kind)
+                        && match target {
+                            "preview" => job.kind == "preview",
+                            "device" => job.kind == "device",
+                            "build" => job.kind.starts_with("export-"),
+                            _ => true,
+                        }
+                })
+                .cloned()
+        };
+        Ok(job.map_or_else(
+            || json!({"job":null,"lines":[],"nextAfter":after,"truncated":false}),
+            |job| job.app_logs(after, limit),
+        ))
+    }
+
+    pub fn preview_logs(&self, project: &Project, input: &Value) -> Result<Value> {
+        let id = crate::mcp::required(input, "jobId")?;
+        let epoch = input["epoch"]
+            .as_u64()
+            .ok_or_else(|| Problem::new(400, "Use the active preview version."))?;
+        let values = input["lines"]
+            .as_array()
+            .filter(|lines| lines.len() <= 32)
+            .ok_or_else(|| Problem::new(400, "Send up to 32 preview log lines."))?;
+        let mut size = 0;
+        for value in values {
+            let text = value
+                .as_str()
+                .filter(|text| text.len() <= 16 * 1024)
+                .ok_or_else(|| Problem::new(413, "Preview log lines are too large."))?;
+            size += text.len();
+        }
+        if size > 64 * 1024 {
+            return Err(Problem::new(413, "This preview log batch is too large."));
+        }
+        let Some(job) = self.preview_job(&project.id).filter(|job| job.id == id) else {
+            return Ok(json!({"accepted":0}));
+        };
+        let mut state = job.state.lock().unwrap();
+        if state.status != "ready" || state.result["epoch"] != epoch {
+            return Ok(json!({"accepted":0}));
+        }
+        for text in values {
+            Job::append_log(&mut state, text.as_str().unwrap());
+        }
+        Ok(json!({"accepted":values.len()}))
     }
 
     pub fn list(&self, id: &str) -> Vec<Value> {
@@ -1242,6 +1393,134 @@ fn new_ipa(root: &Path, previous: &[BuildOutput]) -> Result<PathBuf> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn app_log_excerpts_keep_the_latest_lines_and_bound_unicode_output() {
+        let job = Job::new("preview".into(), Some("app".into()));
+        for index in 0..350 {
+            job.log(format!("\u{1b}[31mline {index}\u{1b}[0m"));
+        }
+        let result = job.app_logs(0, 200);
+        let lines = result["lines"].as_array().unwrap();
+        assert_eq!(lines.len(), 200);
+        assert_eq!(lines[0]["message"], "line 150");
+        assert_eq!(lines[199]["message"], "line 349");
+        assert_eq!(result["nextAfter"], 350);
+        assert_eq!(result["truncated"], true);
+        assert!(
+            job.app_logs(350, 200)["lines"]
+                .as_array()
+                .unwrap()
+                .is_empty()
+        );
+        job.log("🦀".repeat(6000));
+        job.log("🦀".repeat(6000));
+        job.log("🦀".repeat(6000));
+        let bounded = job.app_logs(350, 200);
+        let bytes: usize = bounded["lines"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|line| line["message"].as_str().unwrap().len())
+            .sum();
+        assert!(bytes <= 64 * 1024);
+        assert_eq!(bounded["nextAfter"], 353);
+        assert_eq!(bounded["truncated"], true);
+    }
+
+    #[test]
+    fn app_logs_are_project_scoped_and_ignore_stale_preview_batches() {
+        let home = tempfile::tempdir().unwrap();
+        let projects = Arc::new(Projects::new(home.path().into()));
+        let flutter = Arc::new(Flutter::new(home.path().into()).unwrap());
+        let jobs = Jobs::new(projects, flutter, None);
+        let project: Project = serde_json::from_value(
+            json!({"id":"app","name":"App","root":home.path(),"template":"blank"}),
+        )
+        .unwrap();
+        assert!(jobs.app_logs(&project, &json!({})).unwrap()["job"].is_null());
+        let preview = Arc::new(Job::new("preview".into(), Some(project.id.clone())));
+        {
+            let mut state = preview.state.lock().unwrap();
+            state.status = "ready";
+            state.result = json!({"epoch":4});
+        }
+        let other = Arc::new(Job::new("device".into(), Some("other".into())));
+        let agent = Arc::new(Job::new("agent-send".into(), Some(project.id.clone())));
+        {
+            let mut queue = jobs.queue.lock().unwrap();
+            queue.previews.insert(project.id.clone(), preview.clone());
+            for job in [&preview, &other, &agent] {
+                queue.order.push_back(job.id.clone());
+                queue.jobs.insert(job.id.clone(), job.clone());
+            }
+        }
+        assert_eq!(
+            jobs.app_logs(&project, &json!({})).unwrap()["job"]["id"],
+            preview.id
+        );
+        assert_eq!(
+            jobs.app_logs(&project, &json!({"jobId":other.id}))
+                .unwrap_err()
+                .status
+                .as_u16(),
+            403
+        );
+        assert_eq!(
+            jobs.app_logs(&project, &json!({"jobId":agent.id}))
+                .unwrap_err()
+                .status
+                .as_u16(),
+            400
+        );
+        assert_eq!(
+            jobs.preview_logs(
+                &project,
+                &json!({"jobId":preview.id,"epoch":3,"lines":["old"]})
+            )
+            .unwrap()["accepted"],
+            0
+        );
+        assert_eq!(
+            jobs.preview_logs(
+                &project,
+                &json!({"jobId":other.id,"epoch":4,"lines":["other"]})
+            )
+            .unwrap()["accepted"],
+            0
+        );
+        assert_eq!(
+            jobs.preview_logs(
+                &project,
+                &json!({"jobId":preview.id,"epoch":4,"lines":["Counter=1"]})
+            )
+            .unwrap()["accepted"],
+            1
+        );
+        assert_eq!(
+            jobs.app_logs(&project, &json!({"target":"preview"}))
+                .unwrap()["lines"][0]["message"],
+            "Counter=1"
+        );
+        assert!(jobs.app_logs(&project, &json!({"limit":201})).is_err());
+        assert!(jobs.app_logs(&project, &json!({"after":-1})).is_err());
+        assert!(
+            jobs.preview_logs(
+                &project,
+                &json!({"jobId":preview.id,"epoch":4,"lines":["x".repeat(17*1024)]})
+            )
+            .is_err()
+        );
+        preview.state.lock().unwrap().status = "stopped";
+        assert_eq!(
+            jobs.preview_logs(
+                &project,
+                &json!({"jobId":preview.id,"epoch":4,"lines":["late"]})
+            )
+            .unwrap()["accepted"],
+            0
+        );
+    }
 
     #[test]
     fn failed_ipa_export_cannot_reuse_an_older_ipa() {

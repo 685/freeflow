@@ -14,6 +14,7 @@ mod mcp;
 mod phone_preview;
 mod preview;
 mod processes;
+mod project_rules;
 mod projects;
 mod server;
 mod signing;

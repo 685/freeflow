@@ -77,6 +77,8 @@ pub fn call(jobs: &Arc<Jobs>, name: &str, args: &Value, scope: Option<&str>) -> 
     let project = projects.get(id)?;
     match name {
         "list_files" => Ok(json!(projects.tree(&project)?)),
+        "read_project_rules" => crate::project_rules::load(&project, args["path"].as_str()),
+        "read_app_logs" => jobs.app_logs(&project, args),
         "edit_history" => Ok(projects.edit_history(&project)),
         "replay_edit" => projects.replay_edit(
             &project,
