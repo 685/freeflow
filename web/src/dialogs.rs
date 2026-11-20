@@ -96,6 +96,11 @@ pub(crate) enum View {
     WidgetProperty {
         context: crate::property_panel::Context,
     },
+    AssetPicker {
+        context: crate::property_panel::Context,
+        name: String,
+        entries: Vec<Value>,
+    },
     ComponentReferences {
         project: String,
         generation: u64,
@@ -1133,6 +1138,11 @@ async fn submit_view(view: View, version: u64, mut input: Value) -> Result {
 
 async fn act(view: View, version: u64, action: &str, element: &Element) -> Result {
     match view {
+        View::AssetPicker {
+            context,
+            name,
+            entries,
+        } => crate::property_panel::pick_asset(&context, &name, &entries, version, action).await?,
         View::ComponentReferences {
             project,
             generation,

@@ -45,7 +45,7 @@ pub fn writing(route: &str, method: &str) -> Option<(String, u64)> {
     let (project, part) = route.strip_prefix("/projects/")?.split_once('/')?;
     if !matches!(
         (method, part),
-        ("PUT", "file") | ("POST", "widgets" | "theme")
+        ("PUT", "file") | ("POST", "widgets" | "theme" | "asset")
     ) {
         return None;
     }
@@ -170,6 +170,9 @@ async fn sync_files(project: &str, generation: u64, result: &Value) -> Result {
         return Ok(());
     }
     crate::refresh_tree(project).await?;
+    if state::read(|state| !state.asset_catalog.is_null() || state.assets_open) {
+        crate::asset_panel::refresh(project).await?;
+    }
     let active = state::change(|state| {
         if state.generation != generation {
             return None;

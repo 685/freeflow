@@ -33,7 +33,7 @@ use tokio_util::io::ReaderStream;
 const HTML: &str = include_str!("../ui/index.html");
 const STYLE: &str = include_str!("../ui/styles.css");
 const LOADER: &str = "import init from '/freeflow_web.js';\nawait init({module_or_path: '/freeflow_web_bg.wasm'});\n";
-const CSP: &str = "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; connect-src 'self'; img-src 'self' blob: data:; frame-src http://127.0.0.1:*; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'";
+const CSP: &str = "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; connect-src 'self'; img-src 'self' blob: data:; media-src blob:; frame-src http://127.0.0.1:*; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'";
 const BODY_LIMIT: usize = 15 * 1024 * 1024;
 
 struct Download {
@@ -572,9 +572,10 @@ async fn project_route(
             "artifacts" => json!(jobs.artifacts(&project)?),
             "backends" => backends::state(projects, &project)?,
             "signing" => signing::status(projects, &project),
+            "assets" => projects.assets(&project)?,
             "asset" => {
-                if !files::is_image(&file) {
-                    return Err(Problem::new(415, "Select a supported image file."));
+                if projects::assets::kind(&file).is_none() {
+                    return Err(Problem::new(415, "Select a supported asset file."));
                 }
                 let path = files::project_file(&project.root, &file, false)?;
                 if tokio::fs::metadata(&path).await?.len() > 20 * 1024 * 1024 {
@@ -730,6 +731,24 @@ async fn project_route(
                 jobs.integrate(project, required(&input, "provider")?, &input["config"])?,
             ),
             "signing" => (202, jobs.sign_android(project, input)?),
+            "asset" if input["action"] == "delete" => (
+                200,
+                projects.delete_asset(
+                    &project,
+                    required(&input, "path")?,
+                    required(&input, "revision")?,
+                    required(&input, "manifestRevision")?,
+                )?,
+            ),
+            "asset" if input["action"] == "register" => (
+                200,
+                projects.register_asset(
+                    &project,
+                    required(&input, "path")?,
+                    required(&input, "revision")?,
+                    required(&input, "manifestRevision")?,
+                )?,
+            ),
             "asset" => (
                 201,
                 projects.asset(

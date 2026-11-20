@@ -371,6 +371,28 @@ textarea.editor-input::selection { background: #8470f34d; }
 .asset-view { flex: 1; display: grid; place-content: center; justify-items: center; gap: 13px; min-height: 0; min-width: 0; padding: 18px; overflow: auto; color: var(--muted); }
 .asset-view img { max-width: 100%; max-height: 45vh; object-fit: contain; border-radius: 5px; background: #2b2c35; }
 .asset-view code { font-family: var(--mono); overflow-wrap: anywhere; }
+.asset-view video { max-width: 100%; max-height: 50vh; }
+.asset-view audio { max-width: 100%; }
+.explorer-tab { gap: 4px; padding-inline: 5px; font-size: 11px; }
+.explorer-tab svg { width: 13px; height: 13px; }
+.asset-tools { display: grid; gap: 7px; margin: 0 3px 10px; }
+.asset-tools .file-actions { margin: 0; }
+.asset-tools input, .asset-picker > input { width: 100%; min-width: 0; }
+.asset-drop { padding: 11px 8px; border: 1px dashed var(--border-strong); border-radius: 6px; color: var(--muted); text-align: center; font-size: 11px; line-height: 1.5; }
+.asset-drop.drag-over { border-color: var(--accent); background: var(--accent-soft); }
+.asset-category { display: flex; gap: 6px; margin: 13px 6px 5px; font-size: 11px; color: var(--muted); }
+.asset-category span { font-weight: 400; }
+.asset-row { display: flex; align-items: center; min-width: 0; border-radius: 5px; }
+.asset-row:hover, .asset-row.selected { background: var(--accent-soft); }
+.asset-open { flex: 1; min-width: 0; display: grid; gap: 4px; padding: 8px 6px; background: none; border: 0; text-align: left; }
+.asset-open strong { font-size: 11px; font-weight: 500; }
+.asset-open small { font-size: 9px; color: var(--muted); overflow-wrap: anywhere; }
+.asset-row .icon-button { flex-shrink: 0; width: 25px; }
+.asset-picker, .asset-choices { display: grid; gap: 7px; }
+.asset-choices { max-height: 50vh; overflow: auto; }
+.asset-choice { display: grid; gap: 5px; text-align: left; border: 1px solid var(--border-strong); border-radius: 6px; background: #272831; padding: 10px; overflow-wrap: anywhere; }
+.asset-choice strong { font-size: 12px; }
+.asset-choice small { color: var(--muted); font-size: 10px; }
 
 .modal {
   padding: 0; width: min(560px, calc(100vw - 24px)); max-height: min(86vh, 760px); overflow: hidden;
@@ -456,6 +478,7 @@ textarea.editor-input::selection { background: #8470f34d; }
 @keyframes spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .spinner { animation-duration: 1.8s; } }
 @media (max-width: 1170px) {
+  .explorer-tab svg { display: none; }
   .workbench { grid-template-columns: 216px minmax(0, 1fr) 251px; }
   .top-right .button { padding-inline: 8px; }
   .project-switch { max-width: 140px; }

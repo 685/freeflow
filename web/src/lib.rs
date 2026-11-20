@@ -1,4 +1,5 @@
 mod agent_panel;
+mod asset_panel;
 mod component_panel;
 mod device_panel;
 mod dialogs;
@@ -27,12 +28,11 @@ use crate::{
     },
     state::{Draft, MAIN, Mode},
 };
-use base64::Engine as _;
 use gloo_timers::future::TimeoutFuture;
 use serde_json::{Value, json};
 use wasm_bindgen::{JsCast, JsValue, closure::Closure, prelude::wasm_bindgen};
 use wasm_bindgen_futures::{JsFuture, spawn_local};
-use web_sys::{Blob, DragEvent, Element, HtmlInputElement, KeyboardEvent, ResizeObserver, Url};
+use web_sys::{Blob, DragEvent, Element, KeyboardEvent, ResizeObserver, Url};
 
 fn project_id() -> Result<String> {
     state::read(|state| {
@@ -194,23 +194,33 @@ pub async fn load_file(file: &str, keep: bool) -> Result {
         })
     };
     let result = async {
-        if ui::image(file) {
+        if asset_panel::previewable(file)
+            && (!file.to_ascii_lowercase().ends_with(".svg")
+                || state::read(|state| state.assets_open && !state.widgets))
+        {
             let path = project_route(&project, &format!("asset{}", path_query(file)));
             let response = ui::request(&path, "GET", None).await?;
             let blob: Blob = JsFuture::from(response.blob()?).await?.dyn_into()?;
             if matches() {
                 let url = Url::create_object_url_with_blob(&blob)?;
-                ui::html("asset-view", format!(r#"<img alt="{}" src="{}"><code>{}</code><p class="dialog-help">Declare this asset under flutter.assets in pubspec.yaml.</p>"#,
-                    ui::escape(basename(file)), ui::escape(&url), ui::escape(file)));
+                ui::html("asset-view", asset_panel::preview(file, &url));
                 state::change(|state| {
-                    if let Some(old) = state.asset_url.replace(url) { let _ = Url::revoke_object_url(&old); }
+                    if let Some(old) = state.asset_url.replace(url) {
+                        let _ = Url::revoke_object_url(&old);
+                    }
                 });
             }
             return Ok(());
         }
-        let route = if plan { "plan".into() } else { format!("file{}", path_query(file)) };
+        let route = if plan {
+            "plan".into()
+        } else {
+            format!("file{}", path_query(file))
+        };
         let source = project_get(&project, &route).await?;
-        if !matches() { return Ok(()); }
+        if !matches() {
+            return Ok(());
+        }
         let dart = file.ends_with(".dart");
         let selected = state::change(|state| {
             state.source = source;
@@ -220,15 +230,18 @@ pub async fn load_file(file: &str, keep: bool) -> Result {
             view::editor(state);
             state.widget.clone()
         });
-        if dart { update_visual(&project, file, &selected).await?; }
+        if dart {
+            update_visual(&project, file, &selected).await?;
+        }
         Ok(())
-    }.await;
+    }
+    .await;
     if let Err(error) = result {
         let error: Error = error;
         if matches() {
             state::change(|state| {
                 state.file_error = error.message;
-                if ui::image(file) {
+                if asset_panel::previewable(file) {
                     ui::html(
                         "asset-view",
                         format!("<p>{}</p>", ui::escape(&state.file_error)),
@@ -656,35 +669,6 @@ fn register_events() {
     ui::click("settings", || ui::spawn(dialogs::settings()));
     ui::click("history", || ui::spawn(dialogs::history()));
     ui::click("new-file", dialogs::new_file);
-    ui::click("add-asset", || id("asset-input").click());
-    ui::listen(&id("asset-input"), "change", |event| {
-        let Some(input) =
-            target(&event).and_then(|element| element.dyn_into::<HtmlInputElement>().ok())
-        else {
-            return;
-        };
-        let file = input.files().and_then(|files| files.item(0));
-        input.set_value("");
-        if let Some(file) = file {
-            ui::spawn(async move {
-                let project = project_id()?;
-                if file.size() > (10 * 1024 * 1024) as f64 {
-                    return Err(Error::new("Images must be 10 MiB or smaller."));
-                }
-                let data = JsFuture::from(file.array_buffer()).await?;
-                let bytes = js_sys::Uint8Array::new(&data).to_vec();
-                let data = base64::engine::general_purpose::STANDARD.encode(bytes);
-                let result =
-                    project_post(&project, "asset", json!({"name":file.name(),"data":data}))
-                        .await?;
-                refresh_tree(&project).await?;
-                if current(&project) {
-                    select(string(&result["path"]).into(), Mode::Code).await?;
-                }
-                Ok(())
-            });
-        }
-    });
     ui::click("run", || {
         let action = state::read(|state| {
             if matches!(
@@ -802,13 +786,18 @@ fn register_events() {
     }
     for button in all("[data-explorer]") {
         let widgets = button.get_attribute("data-explorer").as_deref() == Some("widgets");
+        let assets = button.get_attribute("data-explorer").as_deref() == Some("assets");
         ui::listen(&button, "click", move |_| {
             state::change(|state| {
                 state.widgets = widgets;
+                state.assets_open = assets;
                 view::explorer(state);
                 view::inspector(state);
                 preview_inspector::request_tree(state);
-            })
+            });
+            if assets {
+                ui::spawn(asset_panel::refresh_current());
+            }
         });
     }
     ui::click("source-widgets", || preview_inspector::show_tree(false));
@@ -1103,6 +1092,7 @@ fn start() -> std::result::Result<(), JsValue> {
     agent_panel::initialize();
     property_panel::initialize();
     component_panel::initialize();
+    asset_panel::initialize();
     ui::click("run-device", || ui::spawn(device_panel::open()));
     planner::initialize();
     ui::click("app-theme", || ui::spawn(theme::open(None)));

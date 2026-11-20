@@ -27,6 +27,7 @@ struct Field {
     nest: Option<(String, String)>,
     min: Option<f64>,
     max: Option<f64>,
+    asset: Option<String>,
 }
 
 #[derive(Default, Deserialize)]
@@ -637,7 +638,11 @@ fn inspect_in<'a>(source: &'a str, scope: &Scope) -> Result<(Vec<Token<'a>>, Vec
             component: custom.contains(kind),
             parent,
             args: args(&tokens, open),
-            spec: CATALOG.widgets.get(kind).unwrap_or(&EMPTY),
+            spec: CATALOG
+                .widgets
+                .get(&format!("{kind}.{constructor}"))
+                .or_else(|| CATALOG.widgets.get(kind))
+                .unwrap_or(&EMPTY),
         });
     }
     Ok((tokens, nodes))
@@ -787,6 +792,7 @@ pub(crate) fn outline_in(source: &str, scope: &Scope) -> Result<Value> {
             entry["name"] = json!(item.name);
             entry["type"] = json!(item.kind);
             entry["options"] = json!(item.options);
+            entry["asset"] = json!(item.asset);
             let (editable, present, removable) = properties::access(node, &tokens, &item.name);
             entry["present"] = json!(present);
             entry["codeEditable"] = json!(editable);
@@ -973,6 +979,7 @@ fn theme_field(name: &str) -> Field {
         nest: None,
         min: None,
         max: None,
+        asset: None,
     }
 }
 

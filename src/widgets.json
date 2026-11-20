@@ -130,6 +130,12 @@
             "style",
             "TextStyle"
           ]
+        },
+        {
+          "name": "fontFamily",
+          "type": "string",
+          "asset": "fonts",
+          "nest": ["style", "TextStyle"]
         }
       ]
     },
@@ -735,6 +741,15 @@
           "name": "height",
           "type": "number"
         }
+      ]
+    },
+    "Image.asset": {
+      "slots": [],
+      "fields": [
+        { "name": "asset", "type": "string", "positional": true, "asset": "images" },
+        { "name": "width", "type": "number" },
+        { "name": "height", "type": "number" },
+        { "name": "fit", "type": "select", "prefix": "BoxFit", "options": ["fill", "contain", "cover", "fitWidth", "fitHeight", "none", "scaleDown"] }
       ]
     },
     "GestureDetector": {

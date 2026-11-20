@@ -137,7 +137,11 @@ pub fn atomic_write(path: &Path, content: impl AsRef<[u8]>, mode: u32) -> Result
 }
 
 pub fn atomic_create(path: &Path, content: &[u8]) -> Result<()> {
-    write_temp(path, content, 0o644)?
+    atomic_create_mode(path, content, 0o644)
+}
+
+pub fn atomic_create_mode(path: &Path, content: &[u8], mode: u32) -> Result<()> {
+    write_temp(path, content, mode)?
         .persist_noclobber(path)
         .map_err(|error| {
             if error.error.kind() == io::ErrorKind::AlreadyExists {
@@ -165,14 +169,8 @@ static TEXT: LazyLock<Regex> = LazyLock::new(|| {
     r"(?i)\.(?:dart|ya?ml|json|md|txt|xml|plist|html|css|scss|js|mjs|ts|swift|java|kt|kts|gradle|rb|sh|properties|xcconfig|pbxproj|entitlements|sql|svg|lock|toml|iml|arb|webmanifest|gitignore|gitattributes)$"
 ).unwrap()
 });
-static IMAGE: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"(?i)\.(?:avif|gif|ico|jpe?g|png|webp)$").unwrap());
 static RESERVED: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"(?i)^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)").unwrap());
-
-pub fn is_image(name: &str) -> bool {
-    IMAGE.is_match(name)
-}
 
 pub fn is_text(name: &str) -> bool {
     TEXT.is_match(name)

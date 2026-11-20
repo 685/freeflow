@@ -7,8 +7,8 @@ const MAX_BYTES: usize = 32 * 1024 * 1024;
 
 pub struct ChangedFile {
     pub path: String,
-    pub before: Option<String>,
-    pub after: Option<String>,
+    pub before: Option<Vec<u8>>,
+    pub after: Option<Vec<u8>>,
     pub mode: u32,
 }
 
@@ -26,8 +26,7 @@ impl Change {
         self.files
             .iter()
             .map(|file| {
-                file.before.as_ref().map_or(0, String::len)
-                    + file.after.as_ref().map_or(0, String::len)
+                file.before.as_ref().map_or(0, Vec::len) + file.after.as_ref().map_or(0, Vec::len)
             })
             .sum()
     }
@@ -186,8 +185,8 @@ mod tests {
         let record = || {
             vec![ChangedFile {
                 path: "main.dart".into(),
-                before: Some("old".into()),
-                after: Some("new".into()),
+                before: Some(b"old".to_vec()),
+                after: Some(b"new".to_vec()),
                 mode: 0o644,
             }]
         };

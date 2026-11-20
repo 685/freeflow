@@ -109,6 +109,71 @@ pub async fn reset(name: String) -> Result {
         .await
 }
 
+pub async fn open_assets(name: String, category: String) -> Result {
+    let context = Context::capture().await?;
+    let catalog = dom::project_get(&context.project, "assets").await?;
+    if !context.current() {
+        return Ok(());
+    }
+    let entries: Vec<_> = items(&catalog["entries"])
+        .iter()
+        .filter(|entry| {
+            entry["registered"] == true
+                && entry["category"] == category
+                && (category != "fonts" || entry["family"].is_string())
+                && (category != "images"
+                    || !string(&entry["path"])
+                        .to_ascii_lowercase()
+                        .ends_with(".svg"))
+        })
+        .cloned()
+        .collect();
+    let rows: String = entries.iter().enumerate().map(|(index, entry)| {
+        let path = string(&entry["path"]);
+        let label = entry["family"].as_str().unwrap_or(path);
+        format!(r#"<button type="button" class="asset-choice" data-asset-search="{}" data-dialog-action="asset-use-{index}"><strong>{}</strong><small>{}</small></button>"#, h(&format!("{path} {label}")), h(label), h(path))
+    }).collect();
+    dialogs::open(
+        View::AssetPicker {
+            context,
+            name: name.clone(),
+            entries,
+        },
+        "Choose asset",
+        &format!("Set {name} from this project's Flutter assets."),
+        format!(
+            r#"<div class="asset-picker"><input id="asset-picker-search" type="search" aria-label="Search available assets" placeholder="Search assets…" autofocus><div class="asset-choices">{}</div><p id="asset-picker-empty" class="dialog-help" {}>No matching assets. Upload {} in Assets first.</p><div class="form-error" role="alert"></div></div>"#,
+            rows,
+            if rows.is_empty() { "" } else { "hidden" },
+            h(&category)
+        ),
+    );
+    Ok(())
+}
+
+pub async fn pick_asset(
+    context: &Context,
+    name: &str,
+    entries: &[Value],
+    version: u64,
+    action: &str,
+) -> Result {
+    let Some(entry) = action
+        .strip_prefix("asset-use-")
+        .and_then(|index| index.parse::<usize>().ok())
+        .and_then(|index| entries.get(index))
+    else {
+        return Ok(());
+    };
+    let value = entry["family"]
+        .as_str()
+        .unwrap_or_else(|| string(&entry["path"]));
+    let expression = serde_json::to_string(value).unwrap().replace('$', "\\$");
+    context.save(name, json!(expression), false).await?;
+    dialogs::close_current(version);
+    Ok(())
+}
+
 pub async fn open(name: String) -> Result {
     let context = Context::capture().await?;
     let data = if name.is_empty() {
@@ -256,6 +321,25 @@ pub async fn act(context: &Context, version: u64, action: &str) -> Result {
 
 pub fn initialize() {
     dom::listen(&id("modal-body"), "input", |event| {
+        if let Some(field) = dom::target(&event).filter(|field| field.id() == "asset-picker-search")
+        {
+            let term = dom::value(&field).to_lowercase();
+            let mut matches = 0;
+            for entry in dom::all("#modal [data-asset-search]") {
+                let shown = entry
+                    .get_attribute("data-asset-search")
+                    .unwrap_or_default()
+                    .to_lowercase()
+                    .contains(&term);
+                if shown {
+                    matches += 1;
+                    let _ = entry.remove_attribute("hidden");
+                } else {
+                    dom::attr(&entry, "hidden", "");
+                }
+            }
+            dom::hidden("asset-picker-empty", matches > 0);
+        }
         if dom::target(&event).is_some_and(|field| {
             matches!(
                 field.get_attribute("name").as_deref(),
@@ -273,7 +357,16 @@ pub fn initialize() {
         }
     });
     dom::listen(&id("inspector"), "click", |event| {
-        if let Some(element) = dom::closest(&event, "[data-property-code]") {
+        if let Some(element) = dom::closest(&event, "[data-property-asset]") {
+            dom::spawn(open_assets(
+                element
+                    .get_attribute("data-property-asset")
+                    .unwrap_or_default(),
+                element
+                    .get_attribute("data-asset-category")
+                    .unwrap_or_default(),
+            ));
+        } else if let Some(element) = dom::closest(&event, "[data-property-code]") {
             dom::spawn(open(
                 element
                     .get_attribute("data-property-code")

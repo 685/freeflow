@@ -82,9 +82,16 @@ pub fn widget_icon(kind: &str) -> &str {
 
 pub fn explorer(state: &State) {
     let open = !state.project.is_null();
+    let assets = state.assets_open && !state.widgets;
     for tab in all("[data-explorer]") {
-        let widgets = tab.get_attribute("data-explorer").as_deref() == Some("widgets");
-        let active = widgets == state.widgets;
+        let active = tab.get_attribute("data-explorer").as_deref()
+            == Some(if state.widgets {
+                "widgets"
+            } else if assets {
+                "assets"
+            } else {
+                "files"
+            });
         toggle(&tab, "active", active);
         attr(&tab, "aria-pressed", if active { "true" } else { "false" });
     }
@@ -106,12 +113,17 @@ pub fn explorer(state: &State) {
         );
     }
     hidden("source-select-wrap", !open || !state.widgets || rendered);
-    hidden("file-actions", !open || state.widgets);
+    hidden("file-actions", !open || state.widgets || assets);
+    hidden("asset-tools", !open || !assets);
     if !open {
         html(
             "explorer-tree",
             r#"<p class="tree-empty">Open a Flutter project to browse its widgets and files.</p>"#,
         );
+        return;
+    }
+    if assets {
+        crate::asset_panel::render(state);
         return;
     }
     let mut output = String::new();
@@ -281,6 +293,12 @@ fn property(item: &Value) -> String {
     }
     if item["removable"] == true {
         tools.push_str(&format!(r#"<button type="button" class="property-code" data-property-reset="{}" aria-label="Reset {}">Reset</button>"#, h(name), h(name)));
+    }
+    if let Some(category) = item["asset"]
+        .as_str()
+        .filter(|_| !item["conditional"].is_object())
+    {
+        tools.push_str(&format!(r#"<button type="button" class="property-code" data-property-asset="{}" data-asset-category="{}" aria-label="Choose {} from Assets">{}Assets</button>"#, h(name), h(category), h(name), icon("image", 12)));
     }
     let search = format!(
         "{name} {} {} {} {}",
@@ -542,7 +560,7 @@ pub fn editor(state: &State) {
     if planning {
         crate::planner::render(state);
     }
-    if source.is_null() && !image(file) {
+    if source.is_null() && !crate::asset_panel::previewable(file) {
         let label = if state.file_error.is_empty() {
             "Choose a source file."
         } else {

@@ -91,6 +91,7 @@ pub async fn call(
             crate::components::navigate(jobs, &project, &input).await
         }
         "list_files" => Ok(json!(projects.tree(&project)?)),
+        "list_assets" => projects.asset_context(&project, args),
         "read_project_rules" => crate::project_rules::load(&project, args["path"].as_str()),
         "read_app_logs" => jobs.app_logs(&project, args),
         "edit_history" => Ok(projects.edit_history(&project)),

@@ -24,6 +24,309 @@ fn fixture() -> (tempfile::TempDir, projects::Projects, projects::Project) {
 }
 
 #[test]
+fn uploaded_assets_and_pubspec_undo_together_without_losing_existing_yaml() {
+    use base64::Engine as _;
+    let (_home, projects, project) = fixture();
+    let manifest = "# Keep this comment\r\nname: example_app\r\ndependencies: {flutter: {sdk: flutter}}\r\nflutter:\r\n  uses-material-design: true # Keep this too\r\n  assets: [assets/existing/] # Existing assets\r\n  fonts:\r\n    - family: Existing\r\n      fonts:\r\n        - asset: assets/fonts/existing.ttf\r\n";
+    fs::write(project.root.join("pubspec.yaml"), manifest).unwrap();
+    let binary = [0, 255, 1, 128, 0, 9];
+    let uploaded = projects
+        .asset(
+            &project,
+            "test image.png",
+            &base64::engine::general_purpose::STANDARD.encode(binary),
+        )
+        .unwrap();
+    let path = uploaded["path"].as_str().unwrap();
+    assert_eq!(path, "assets/images/test image.png");
+    assert_eq!(fs::read(project.root.join(path)).unwrap(), binary);
+    let after = projects.file(&project, "pubspec.yaml").unwrap();
+    assert!(after.content.contains("# Keep this comment\r\n"));
+    assert!(
+        after
+            .content
+            .contains("uses-material-design: true # Keep this too")
+    );
+    assert!(after.content.contains("# Existing assets"));
+    assert!(after.content.contains("family: Existing"));
+    assert!(!after.content.replace("\r\n", "").contains('\n'));
+    assert!(after.content.contains(path));
+    let catalog = projects.assets(&project).unwrap();
+    assert_eq!(catalog["entries"][0]["registered"], true);
+    let history = projects.edit_history(&project);
+    assert_eq!(history["undo"]["files"].as_array().unwrap().len(), 2);
+    projects
+        .replay_edit(&project, "undo", history["revision"].as_str().unwrap())
+        .unwrap();
+    assert!(!project.root.join(path).exists());
+    assert_eq!(
+        projects.file(&project, "pubspec.yaml").unwrap().content,
+        manifest
+    );
+    let history = projects.edit_history(&project);
+    projects
+        .replay_edit(&project, "redo", history["revision"].as_str().unwrap())
+        .unwrap();
+    assert_eq!(fs::read(project.root.join(path)).unwrap(), binary);
+    assert_eq!(
+        projects.file(&project, "pubspec.yaml").unwrap().content,
+        after.content
+    );
+    let catalog = projects.assets(&project).unwrap();
+    projects
+        .delete_asset(
+            &project,
+            path,
+            catalog["entries"][0]["revision"].as_str().unwrap(),
+            catalog["manifestRevision"].as_str().unwrap(),
+        )
+        .unwrap();
+    assert!(!project.root.join(path).exists());
+    assert!(
+        !projects
+            .file(&project, "pubspec.yaml")
+            .unwrap()
+            .content
+            .contains(path)
+    );
+    let history = projects.edit_history(&project);
+    projects
+        .replay_edit(&project, "undo", history["revision"].as_str().unwrap())
+        .unwrap();
+    assert_eq!(fs::read(project.root.join(path)).unwrap(), binary);
+    assert_eq!(
+        projects.file(&project, "pubspec.yaml").unwrap().content,
+        after.content
+    );
+}
+
+#[test]
+fn asset_conflicts_and_invalid_manifests_leave_files_and_history_untouched() {
+    use base64::Engine as _;
+    let (_home, projects, project) = fixture();
+    let encoded = base64::engine::general_purpose::STANDARD.encode([1, 2, 3]);
+    let uploaded = projects.asset(&project, "tone.wav", &encoded).unwrap();
+    let path = uploaded["path"].as_str().unwrap();
+    let before = projects.file(&project, "pubspec.yaml").unwrap();
+    let history = projects.edit_history(&project);
+    assert_eq!(
+        projects
+            .asset(&project, "tone.wav", &encoded)
+            .unwrap_err()
+            .status,
+        409
+    );
+    assert_eq!(
+        projects
+            .asset(&project, "../outside.wav", &encoded)
+            .unwrap_err()
+            .status,
+        400
+    );
+    assert_eq!(
+        projects.file(&project, "pubspec.yaml").unwrap().revision,
+        before.revision
+    );
+    assert_eq!(projects.edit_history(&project), history);
+    let catalog = projects.assets(&project).unwrap();
+    fs::write(
+        project.root.join("pubspec.yaml"),
+        format!("{}# external edit\n", before.content),
+    )
+    .unwrap();
+    assert_eq!(
+        projects
+            .delete_asset(
+                &project,
+                path,
+                catalog["entries"][0]["revision"].as_str().unwrap(),
+                catalog["manifestRevision"].as_str().unwrap()
+            )
+            .unwrap_err()
+            .status,
+        409
+    );
+    assert!(project.root.join(path).is_file());
+    assert_eq!(
+        projects
+            .replay_edit(&project, "undo", history["revision"].as_str().unwrap())
+            .unwrap_err()
+            .status,
+        409
+    );
+    fs::write(
+        project.root.join("pubspec.yaml"),
+        "name: example_app\nflutter: {assets: invalid}\n",
+    )
+    .unwrap();
+    assert_eq!(
+        projects
+            .asset(&project, "new.png", &encoded)
+            .unwrap_err()
+            .status,
+        422
+    );
+    assert!(!project.root.join("assets/images/new.png").exists());
+    assert_eq!(projects.edit_history(&project), history);
+    assert!(
+        projects
+            .delete_asset(&project, "lib/main.dart", "x", "x")
+            .is_err()
+    );
+}
+
+#[test]
+fn font_registration_directory_assets_and_structured_asset_entries_are_preserved() {
+    use base64::Engine as _;
+    let (_home, projects, project) = fixture();
+    let manifest = "name: example_app\nflutter:\n  assets:\n    - assets/images/ # Covers direct images only\n    - path: assets/special.json\n      platforms: [web]\n  fonts:\n    - family: Body\n      fonts:\n        - asset: fonts/body.ttf\n          weight: 700\n";
+    fs::write(project.root.join("pubspec.yaml"), manifest).unwrap();
+    let encoded = base64::engine::general_purpose::STANDARD.encode([0, 1, 2, 3]);
+    projects.asset(&project, "logo.png", &encoded).unwrap();
+    assert_eq!(
+        projects.file(&project, "pubspec.yaml").unwrap().content,
+        manifest
+    );
+    let font = projects.asset(&project, "Body.ttf", &encoded).unwrap();
+    assert_eq!(font["family"], "Body_2");
+    let content = projects.file(&project, "pubspec.yaml").unwrap().content;
+    assert!(content.contains("platforms: [web]"));
+    assert!(content.contains("weight: 700"));
+    let catalog = projects.assets(&project).unwrap();
+    let entry = catalog["entries"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|entry| entry["category"] == "fonts")
+        .unwrap();
+    projects
+        .delete_asset(
+            &project,
+            font["path"].as_str().unwrap(),
+            entry["revision"].as_str().unwrap(),
+            catalog["manifestRevision"].as_str().unwrap(),
+        )
+        .unwrap();
+    assert_eq!(
+        projects.file(&project, "pubspec.yaml").unwrap().content,
+        manifest
+    );
+    let catalog = projects.assets(&project).unwrap();
+    let image = &catalog["entries"][0];
+    projects
+        .delete_asset(
+            &project,
+            image["path"].as_str().unwrap(),
+            image["revision"].as_str().unwrap(),
+            catalog["manifestRevision"].as_str().unwrap(),
+        )
+        .unwrap();
+    assert_eq!(
+        projects.file(&project, "pubspec.yaml").unwrap().content,
+        manifest
+    );
+    fs::write(project.root.join("assets/legacy.json"), "{\"legacy\":true}").unwrap();
+    let catalog = projects.assets(&project).unwrap();
+    let legacy = catalog["entries"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|entry| entry["path"] == "assets/legacy.json")
+        .unwrap();
+    assert_eq!(legacy["registered"], false);
+    projects
+        .register_asset(
+            &project,
+            "assets/legacy.json",
+            legacy["revision"].as_str().unwrap(),
+            catalog["manifestRevision"].as_str().unwrap(),
+        )
+        .unwrap();
+    assert!(
+        projects
+            .file(&project, "pubspec.yaml")
+            .unwrap()
+            .content
+            .contains("assets/legacy.json")
+    );
+    let history = projects.edit_history(&project);
+    projects
+        .replay_edit(&project, "undo", history["revision"].as_str().unwrap())
+        .unwrap();
+    assert_eq!(
+        projects.file(&project, "pubspec.yaml").unwrap().content,
+        manifest
+    );
+    assert_eq!(
+        fs::read_to_string(project.root.join("assets/legacy.json")).unwrap(),
+        "{\"legacy\":true}"
+    );
+}
+
+#[test]
+fn asset_and_font_properties_keep_constructor_arguments_and_callbacks() {
+    let source = "Widget build(context) => Column(children: [Image.asset('old.png', width: 48, errorBuilder: (context, error, stack) => const Text('fallback')), Image.network('https://example.com/image.png'), const Text('Title')]);";
+    let tree = visual::outline(source).unwrap();
+    let nodes = tree["nodes"].as_array().unwrap();
+    let image = nodes
+        .iter()
+        .find(|node| node["type"] == "Image.asset")
+        .unwrap();
+    assert_eq!(image["properties"][0]["asset"], "images");
+    let changed = visual::edit(source, &json!({"id":image["id"],"operation":"expression","name":"asset","expression":"'assets/images/new.png'"})).unwrap();
+    assert!(changed.contains("Image.asset('assets/images/new.png', width: 48, errorBuilder:"));
+    assert!(changed.contains("Image.network('https://example.com/image.png')"));
+    let title = nodes
+        .iter()
+        .rev()
+        .find(|node| node["type"] == "Text")
+        .unwrap();
+    let changed = visual::edit(source, &json!({"id":title["id"],"operation":"expression","name":"fontFamily","expression":"'Body'"})).unwrap();
+    assert!(changed.contains("fontFamily: 'Body'"));
+    assert!(changed.contains("errorBuilder:"));
+}
+
+#[test]
+fn registering_existing_assets_creates_missing_flutter_configuration_and_only_undoes_the_declaration()
+ {
+    for extra in ["", "flutter:\n", "flutter: null\n"] {
+        let (_home, projects, project) = fixture();
+        let manifest =
+            format!("name: example_app\ndependencies: {{flutter: {{sdk: flutter}}}}\n{extra}");
+        fs::write(project.root.join("pubspec.yaml"), &manifest).unwrap();
+        fs::create_dir(project.root.join("assets")).unwrap();
+        fs::write(project.root.join("assets/data.json"), "{\"existing\":true}").unwrap();
+        let catalog = projects.assets(&project).unwrap();
+        assert!(catalog["manifestError"].is_null());
+        projects
+            .register_asset(
+                &project,
+                "assets/data.json",
+                catalog["entries"][0]["revision"].as_str().unwrap(),
+                catalog["manifestRevision"].as_str().unwrap(),
+            )
+            .unwrap();
+        let context = projects
+            .asset_context(&project, &json!({"category":"documents","query":"data"}))
+            .unwrap();
+        assert_eq!(context["entries"][0]["registered"], true);
+        let history = projects.edit_history(&project);
+        assert_eq!(history["undo"]["files"], json!(["pubspec.yaml"]));
+        projects
+            .replay_edit(&project, "undo", history["revision"].as_str().unwrap())
+            .unwrap();
+        assert_eq!(
+            projects.file(&project, "pubspec.yaml").unwrap().content,
+            manifest
+        );
+        assert_eq!(
+            fs::read_to_string(project.root.join("assets/data.json")).unwrap(),
+            "{\"existing\":true}"
+        );
+    }
+}
+
+#[test]
 fn project_component_imports_exports_and_inheritance_keep_widget_edits_available() {
     let (_home, projects, project) = fixture();
     fs::create_dir_all(project.root.join("lib/cards")).unwrap();

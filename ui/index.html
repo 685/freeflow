@@ -48,6 +48,7 @@
       <div class="explorer-tabs" role="group" aria-label="Explorer view">
         <button type="button" id="widgets-tab" class="explorer-tab active" data-explorer="widgets"><span data-icon="layers"></span>Widgets</button>
         <button type="button" id="files-tab" class="explorer-tab" data-explorer="files"><span data-icon="folder"></span>Files</button>
+        <button type="button" id="assets-tab" class="explorer-tab" data-explorer="assets"><span data-icon="image"></span>Assets</button>
       </div>
       <div class="explorer-content">
         <div class="tree-mode" id="tree-mode" role="group" aria-label="Widget tree view" hidden>
@@ -61,7 +62,12 @@
         <div id="file-actions" class="file-actions" hidden>
           <button id="new-file" class="button soft small" type="button"><span data-icon="plus"></span>File</button>
           <button id="add-asset" class="button soft small" type="button"><span data-icon="image"></span>Asset</button>
-          <input id="asset-input" type="file" accept="image/png,image/jpeg,image/webp,image/gif,image/avif,image/x-icon" hidden>
+        </div>
+        <input id="asset-input" type="file" accept=".png,.jpg,.jpeg,.gif,.webp,.avif,.ico,.bmp,.wbmp,.svg,.mp3,.wav,.ogg,.flac,.aac,.m4a,.opus,.mp4,.m4v,.webm,.mov,.ogv,.ttf,.otf,.pdf,.txt,.json,.csv,.xml,.md,.arb,.zip" multiple hidden>
+        <div id="asset-tools" class="asset-tools" hidden>
+          <div class="file-actions"><button id="upload-assets" class="button soft small" type="button"><span data-icon="plus"></span>Upload assets</button><button id="refresh-assets" class="icon-button" type="button" aria-label="Refresh assets"><span data-icon="reload"></span></button></div>
+          <input id="asset-search" type="search" placeholder="Search assets…" aria-label="Search assets">
+          <div id="asset-drop" class="asset-drop" role="group" aria-label="Asset upload area">Drop files here · up to 10 MiB each</div>
         </div>
         <div id="explorer-tree" class="tree"></div>
       </div>

@@ -1,6 +1,5 @@
 use crate::edits::{ChangedFile, History};
 use crate::files::{self, Problem, Result, Source, Tree};
-use base64::Engine as _;
 use chrono::Utc;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
@@ -13,6 +12,7 @@ use std::{
 };
 
 pub const PLAN: &str = "FREEFLOW_PLAN.md";
+pub(crate) mod assets;
 const PLAN_BODY: &str = "\n\n## Goal\n\n## Screens\n\n- [ ] Home\n\n## Data and user flows\n";
 const DAYMARK: &str = include_str!("../templates/daymark.dart");
 const BLANK: &str = include_str!("../templates/blank.dart");
@@ -95,7 +95,6 @@ static SLUG: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"[^a-z0-9]+").unwrap
 static ORG: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"^[a-z][a-z0-9]*(?:\.[a-z][a-z0-9]*)+$").unwrap());
 static HISTORY: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^\d{13}-[0-9a-f]{6}$").unwrap());
-static ASSET: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^[A-Za-z0-9_.-]+$").unwrap());
 
 #[derive(Debug, Deserialize, Serialize)]
 struct HistoryVersion {
@@ -377,8 +376,8 @@ impl Projects {
             &project.id,
             vec![ChangedFile {
                 path: relative.into(),
-                before: previous.map(|source| source.content),
-                after: Some(saved.content.clone()),
+                before: previous.map(|source| source.content.into_bytes()),
+                after: Some(saved.content.as_bytes().to_vec()),
                 mode,
             }],
         );
@@ -400,17 +399,12 @@ impl Projects {
 
     pub fn apply_edits(&self, project: &Project, edits: &[FileEdit]) -> Result<()> {
         let mut journal = self.writes.lock().unwrap();
-        let changes = self.apply_edits_inner(project, edits, &[])?;
+        let changes = self.apply_edits_inner(project, edits)?;
         journal.record(&project.id, changes);
         Ok(())
     }
 
-    fn apply_edits_inner(
-        &self,
-        project: &Project,
-        edits: &[FileEdit],
-        restore: &[ChangedFile],
-    ) -> Result<Vec<ChangedFile>> {
+    fn apply_edits_inner(&self, project: &Project, edits: &[FileEdit]) -> Result<Vec<ChangedFile>> {
         let mut seen = HashSet::new();
         let mut pending = Vec::with_capacity(edits.len());
         for edit in edits {
@@ -440,10 +434,7 @@ impl Projects {
             }
             if before.as_ref().map(|source| source.content.as_str()) != after {
                 let mode = if before.is_none() {
-                    restore
-                        .iter()
-                        .find(|file| file.path == edit.path)
-                        .map_or(0o644, |file| file.mode)
+                    0o644
                 } else {
                     file_mode(&target, true)?
                 };
@@ -482,8 +473,8 @@ impl Projects {
             .into_iter()
             .map(|edit| ChangedFile {
                 path: edit.path.into(),
-                before: edit.before.map(|source| source.content),
-                after: edit.after.map(str::to_owned),
+                before: edit.before.map(|source| source.content.into_bytes()),
+                after: edit.after.map(|content| content.as_bytes().to_vec()),
                 mode: edit.mode,
             })
             .collect())
@@ -496,27 +487,113 @@ impl Projects {
     pub fn replay_edit(&self, project: &Project, action: &str, revision: &str) -> Result<Value> {
         let mut journal = self.writes.lock().unwrap();
         let change = journal.pending(&project.id, action, revision)?;
-        let edits: Vec<_> = change
+        let changes: Vec<_> = change
             .files
             .iter()
             .map(|file| {
-                let (expected, content) = if action == "undo" {
+                let (before, after) = if action == "undo" {
                     (&file.after, &file.before)
                 } else {
                     (&file.before, &file.after)
                 };
-                FileEdit {
+                ChangedFile {
                     path: file.path.clone(),
-                    revision: expected.as_ref().map(files::revision),
-                    content: content.clone(),
+                    before: before.clone(),
+                    after: after.clone(),
+                    mode: file.mode,
                 }
             })
             .collect();
-        self.apply_edits_inner(project, &edits, &change.files)?;
+        self.apply_changes_inner(project, &changes)?;
         journal.complete(&project.id, action);
         Ok(
-            json!({"history":journal.status(&project.id), "files":edits.iter().map(|edit| json!({"path":edit.path,"exists":edit.content.is_some()})).collect::<Vec<_>>()}),
+            json!({"history":journal.status(&project.id), "files":changes.iter().map(|edit| json!({"path":edit.path,"exists":edit.after.is_some()})).collect::<Vec<_>>()}),
         )
+    }
+
+    fn apply_changes_inner(&self, project: &Project, changes: &[ChangedFile]) -> Result<()> {
+        let mut pending = vec![];
+        let mut history = vec![];
+        for change in changes {
+            let target = files::project_file(&project.root, &change.path, true)?;
+            let before = if files::exists(&target)? {
+                if fs::metadata(&target)?.len() > assets::MAX_ASSET as u64 {
+                    return Err(Problem::new(409, "A changed file is too large to replay."));
+                }
+                Some(fs::read(&target)?)
+            } else {
+                None
+            };
+            if before != change.before {
+                return Err(Problem::new(
+                    409,
+                    format!("{} changed on disk. Reload and retry.", change.path),
+                ));
+            }
+            pending.push((target, change));
+        }
+        for (_, change) in &pending {
+            if files::is_text(&change.path) {
+                if let Some(text) = change
+                    .before
+                    .as_deref()
+                    .and_then(|bytes| std::str::from_utf8(bytes).ok())
+                    .filter(|text| text.len() <= files::MAX_TEXT)
+                {
+                    history.push(self.remember(
+                        project,
+                        &change.path,
+                        &Source {
+                            path: change.path.clone(),
+                            content: text.into(),
+                            revision: Some(files::revision(text)),
+                        },
+                    )?);
+                }
+            }
+        }
+        let replace = |target: &Path, content: Option<&[u8]>, mode| -> Result<()> {
+            if let Some(content) = content {
+                files::atomic_write(target, content, mode)
+            } else {
+                Ok(fs::remove_file(target)?)
+            }
+        };
+        for (index, (target, change)) in pending.iter().enumerate() {
+            let result = if change.before.is_none() {
+                files::atomic_create_mode(
+                    target,
+                    change.after.as_deref().unwrap_or_default(),
+                    change.mode,
+                )
+            } else {
+                replace(target, change.after.as_deref(), change.mode)
+            };
+            if let Err(error) = result {
+                let mut restored = true;
+                for (target, change) in pending[..index].iter().rev() {
+                    restored &= if change.after.is_none() {
+                        files::atomic_create_mode(
+                            target,
+                            change.before.as_deref().unwrap_or_default(),
+                            change.mode,
+                        )
+                        .is_ok()
+                    } else {
+                        replace(target, change.before.as_deref(), change.mode).is_ok()
+                    };
+                }
+                if !restored {
+                    return Err(Problem::new(
+                        500,
+                        "Some files could not be restored after a write failure. Check the project files.",
+                    ));
+                }
+                return Err(error);
+            }
+        }
+        history.into_iter().for_each(prune_history);
+        Ok(())
     }
 
     fn history_dir(&self, project: &Project, relative: &str) -> PathBuf {
@@ -566,30 +643,6 @@ impl Projects {
                 .join(format!("{id}.json")),
         )?
         .ok_or_else(|| Problem::new(404, "History entry not found."))
-    }
-
-    pub fn asset(&self, project: &Project, name: &str, encoded: &str) -> Result<Value> {
-        if !files::is_image(name) || !ASSET.is_match(name) || name.starts_with('.') {
-            return Err(Problem::new(
-                400,
-                "Use an image filename containing letters, numbers, dashes or underscores.",
-            ));
-        }
-        let bytes = base64::engine::general_purpose::STANDARD
-            .decode(encoded)
-            .or_else(|_| base64::engine::general_purpose::STANDARD_NO_PAD.decode(encoded))
-            .map_err(|_| Problem::new(400, "Invalid image."))?;
-        if bytes.is_empty() || bytes.len() > 10 * 1024 * 1024 {
-            return Err(Problem::new(
-                413,
-                "Images must be between 1 byte and 10 MiB.",
-            ));
-        }
-        let relative = format!("assets/{name}");
-        let _guard = self.writes.lock().unwrap();
-        let path = files::project_file(&project.root, &relative, true)?;
-        files::atomic_create(&path, &bytes)?;
-        Ok(json!({"path": relative}))
     }
 }
 

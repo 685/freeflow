@@ -250,7 +250,7 @@ fn tools(editing: bool) -> Vec<Value> {
     let mut tools: Vec<_> = mcp::definitions().iter().filter_map(|tool| {
         let name = tool["name"].as_str()?;
         let allowed = match name {
-            "list_files" | "read_file" | "inspect_widgets" | "read_widget_property" | "read_project_rules" | "read_app_logs" => true,
+            "list_files" | "list_assets" | "read_file" | "inspect_widgets" | "read_widget_property" | "read_project_rules" | "read_app_logs" => true,
             "write_file" | "edit_widget" => editing,
             _ => false,
         };
@@ -385,6 +385,11 @@ impl Workspace<'_> {
         }
         if name == "read_app_logs" {
             return self.jobs.app_logs(self.project, &input);
+        }
+        if name == "list_assets" {
+            let mut catalog = self.projects.asset_context(self.project, &input)?;
+            catalog["pendingManifest"] = json!(self.pending.contains_key("pubspec.yaml"));
+            return Ok(catalog);
         }
         let path = required(&input, "path")?;
         match name {
@@ -586,9 +591,11 @@ async fn answer(
                 ));
             }
             let label = match call.name.as_str() {
-                "list_files" | "read_file" | "inspect_widgets" | "read_widget_property" => {
-                    "Reading project"
-                }
+                "list_files"
+                | "list_assets"
+                | "read_file"
+                | "inspect_widgets"
+                | "read_widget_property" => "Reading project",
                 "read_project_rules" => "Reading project rules",
                 "read_app_logs" => "Reading app logs",
                 "write_file" | "edit_widget" | "replace_text" => "Preparing changes",

@@ -1,5 +1,20 @@
 [
   {
+    "name": "list_assets",
+    "description": "List up to 200 app assets with their project-relative paths, media categories, sizes, Flutter registration and font family names from saved pubspec.yaml. Filter by query or category when truncated. Use existing paths or font families when editing Flutter widgets; binary files are not returned as text.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "projectId": { "type": "string" },
+        "query": { "type": "string" },
+        "category": { "enum": ["images", "audio", "videos", "fonts", "documents"] }
+      },
+      "required": [],
+      "additionalProperties": false
+    },
+    "annotations": { "readOnlyHint": true, "openWorldHint": false }
+  },
+  {
     "name": "component_definition",
     "description": "Resolve a project widget component to its class definition using the Dart SDK. Uses the selected instance by default, or its containing component for a build-method widget. A definition includes a source revision and its build widget where available. Read inspect_widgets first. Requires a configured Dart SDK and saved project source.",
     "inputSchema": {
