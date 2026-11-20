@@ -615,6 +615,30 @@ pub(crate) fn design_reference(source: &str, input: &Value) -> Result<Value> {
         .ok_or_else(|| Problem::new(409, "Refresh the design values before using this value."))
 }
 
+pub(crate) fn design_binding(source: &str, command: &Value, scope: &Scope) -> Result<String> {
+    let (tokens, nodes) = inspect_in(source, scope)?;
+    let node = nodes
+        .iter()
+        .find(|node| command["id"] == node.id)
+        .ok_or_else(|| Problem::new(409, "Select the widget again."))?;
+    let name = command["name"].as_str().unwrap_or_default();
+    if let Some(field) = node.spec.fields.iter().find(|field| {
+        field.name == name
+            || field
+                .nest
+                .as_ref()
+                .is_some_and(|(outer, _)| format!("{outer}.{}", field.name) == name)
+    }) {
+        if !property(node, field, &tokens).editable {
+            return Err(Problem::new(
+                422,
+                "Edit the containing style or decoration instead of setting this property directly.",
+            ));
+        }
+    }
+    edit_in(source, command, scope)
+}
+
 pub(crate) fn design_import(
     source: &str,
     uris: &[String],

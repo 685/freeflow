@@ -240,7 +240,7 @@ pub fn bind(projects: &Projects, project: &Project, input: &Value) -> Result<Val
         let old = required(input,"id")?.parse::<u64>().map_err(|_| Problem::new(400,"Choose a source widget."))?;
         selected=old.checked_add(shift as u64).ok_or_else(|| Problem::new(400,"Choose a source widget."))?.to_string();
         let scope = visual::Scope::for_source(project,path,&text);
-        visual::edit_in(&text,&json!({"id":selected,"operation":"expression","name":required(input,"name")?,"expression":expression}),&scope)
+        visual::design_binding(&text,&json!({"id":selected,"operation":"expression","name":required(input,"name")?,"expression":expression}),&scope)
     })?;
     Ok(json!({"source":source,"widget":selected}))
 }

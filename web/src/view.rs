@@ -297,7 +297,11 @@ fn property(item: &Value) -> String {
         _ if name.ends_with("borderRadius") => "radius",
         _ => "",
     };
-    if !design_kind.is_empty() && item["codeEditable"] == true && !item["conditional"].is_object() {
+    if !design_kind.is_empty()
+        && item["codeEditable"] == true
+        && item["designEditable"] != false
+        && !item["conditional"].is_object()
+    {
         tools.push_str(&format!(r#"<button type="button" class="property-code" data-property-theme="{}" data-design-kind="{design_kind}" aria-label="Choose {} from Theme">{}Theme</button>"#,h(name),h(name),icon("palette",12)));
     }
     if item["codeEditable"] == true {

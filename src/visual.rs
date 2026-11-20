@@ -12,7 +12,9 @@ mod design;
 mod properties;
 pub(crate) use components::Scope;
 pub(crate) use components::component_at;
-pub(crate) use design::{design_import, design_reference, design_values, edit_design_value};
+pub(crate) use design::{
+    design_binding, design_import, design_reference, design_values, edit_design_value,
+};
 #[cfg(test)]
 pub use properties::{property_completion, property_details};
 pub(crate) use properties::{property_completion_in, property_details_in};
@@ -809,6 +811,7 @@ pub(crate) fn outline_in(source: &str, scope: &Scope) -> Result<Value> {
             let (editable, present, removable) = properties::access(node, &tokens, &item.name);
             entry["present"] = json!(present);
             entry["codeEditable"] = json!(editable);
+            entry["designEditable"] = json!(context.editable);
             entry["removable"] = json!(removable);
             entry
         }).collect();

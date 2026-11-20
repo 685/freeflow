@@ -246,6 +246,55 @@ fn design_references_reuse_import_aliases_and_reject_private_values_parts_and_tr
 }
 
 #[test]
+fn design_colors_use_a_containers_decoration_without_creating_conflicting_arguments() {
+    let (_home, projects, project) = fixture();
+    fs::write(project.root.join("lib/theme.dart"), DESIGN_SOURCE).unwrap();
+    let main = "import 'package:flutter/material.dart';\nWidget build()=>Container(decoration: const BoxDecoration(color: Colors.blue));\n";
+    fs::write(project.root.join("lib/main.dart"), main).unwrap();
+    let tree = server::read_widgets(&projects, &project, "lib/main.dart").unwrap();
+    let container = tree["nodes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|node| node["type"] == "Container")
+        .unwrap();
+    let color = container["properties"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|field| field["name"] == "color")
+        .unwrap();
+    assert_eq!(color["designEditable"], false);
+    let values = design_values::catalog(
+        &projects,
+        &project,
+        &json!({"kind":"color","query":"brand"}),
+    )
+    .unwrap();
+    let value = &values["entries"][0];
+    let mut input = json!({"path":"lib/main.dart","revision":tree["revision"],"id":container["id"],"name":"color","valuePath":value["path"],"valueId":value["id"],"valueRevision":value["revision"]});
+    assert_eq!(
+        design_values::bind(&projects, &project, &input)
+            .unwrap_err()
+            .status,
+        422
+    );
+    assert_eq!(
+        projects.file(&project, "lib/main.dart").unwrap().content,
+        main
+    );
+    assert_eq!(projects.edit_history(&project)["undoCount"], 0);
+    input["name"] = json!("decoration.color");
+    let bound = design_values::bind(&projects, &project, &input).unwrap();
+    assert!(
+        bound["source"]["content"]
+            .as_str()
+            .unwrap()
+            .contains("BoxDecoration(color: freeflowTheme.AppDesign.brand)")
+    );
+}
+
+#[test]
 fn design_binding_creates_nested_text_styles_in_the_widgets_import_namespace() {
     let (_home, projects, project) = fixture();
     fs::write(project.root.join("lib/theme#dark.dart"), DESIGN_SOURCE).unwrap();
