@@ -250,7 +250,7 @@ fn tools(editing: bool) -> Vec<Value> {
     let mut tools: Vec<_> = mcp::definitions().iter().filter_map(|tool| {
         let name = tool["name"].as_str()?;
         let allowed = match name {
-            "list_files" | "read_file" | "inspect_widgets" | "read_project_rules" | "read_app_logs" => true,
+            "list_files" | "read_file" | "inspect_widgets" | "read_widget_property" | "read_project_rules" | "read_app_logs" => true,
             "write_file" | "edit_widget" => editing,
             _ => false,
         };
@@ -418,6 +418,22 @@ impl Workspace<'_> {
                     "rules":crate::project_rules::load(self.project, Some(path))?}),
                 )
             }
+            "read_widget_property" if path.ends_with(".dart") => {
+                let file = self.existing(path)?;
+                if file.revision.as_deref() != revision(&input)? {
+                    return Err(Problem::new(
+                        409,
+                        "Read the widget outline again and use its current revision.",
+                    ));
+                }
+                let mut data = visual::property_details(
+                    &file.content,
+                    required(&input, "id")?,
+                    required(&input, "name")?,
+                )?;
+                data["revision"] = json!(file.revision);
+                Ok(data)
+            }
             "inspect_widgets" if path.ends_with(".dart") => {
                 let file = self.existing(path)?;
                 let mut outline = visual::outline(&file.content)?;
@@ -566,7 +582,9 @@ async fn answer(
                 ));
             }
             let label = match call.name.as_str() {
-                "list_files" | "read_file" | "inspect_widgets" => "Reading project",
+                "list_files" | "read_file" | "inspect_widgets" | "read_widget_property" => {
+                    "Reading project"
+                }
                 "read_project_rules" => "Reading project rules",
                 "read_app_logs" => "Reading app logs",
                 "write_file" | "edit_widget" | "replace_text" => "Preparing changes",

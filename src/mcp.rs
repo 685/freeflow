@@ -1,7 +1,7 @@
 use crate::{
     files::{self, Problem, Result, Session},
     jobs::Jobs,
-    server::{read_widgets, write_widgets},
+    server::{read_widgets, widget_property, write_widgets},
 };
 use serde_json::{Value, json};
 use std::{
@@ -93,6 +93,7 @@ pub fn call(jobs: &Arc<Jobs>, name: &str, args: &Value, scope: Option<&str>) -> 
             revision(args)?
         )?)),
         "inspect_widgets" => read_widgets(projects, &project, required(args, "path")?),
+        "read_widget_property" => widget_property(projects, &project, args),
         "edit_widget" => write_widgets(projects, &project, args),
         "start_preview" => jobs.start_preview(project),
         "preview_status" => Ok(json!({"preview":jobs.preview(&project.id)})),

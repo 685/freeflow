@@ -262,7 +262,26 @@ fn file_rows(
 }
 
 fn property(item: &Value) -> String {
-    property_input(item, item, string(&item["name"]), "")
+    let name = string(&item["name"]);
+    let mut tools = String::new();
+    if item["codeEditable"] == true {
+        tools.push_str(&format!(r#"<button type="button" class="property-code" data-property-code="{}" aria-label="Edit {} as Dart" title="Edit Dart expression">{}Dart</button>"#, h(name), h(name), icon("code", 12)));
+    }
+    if item["removable"] == true {
+        tools.push_str(&format!(r#"<button type="button" class="property-code" data-property-reset="{}" aria-label="Reset {}">Reset</button>"#, h(name), h(name)));
+    }
+    let search = format!(
+        "{name} {} {} {} {}",
+        string(&item["type"]),
+        string(&item["expression"]),
+        display(&item["value"]),
+        item["conditional"]
+    );
+    format!(
+        r#"<div class="property-card" data-property-search="{}">{}<div class="property-tools">{tools}</div></div>"#,
+        h(&search),
+        property_input(item, item, name, "")
+    )
 }
 
 fn property_input(item: &Value, field: &Value, label: &str, branch: &str) -> String {
@@ -415,12 +434,19 @@ pub fn inspector(state: &State) {
     }
     content.push_str("</div></div>");
     content.push_str(&crate::widget_clipboard::controls(node, false));
+    content.push_str(&format!(r#"<div class="property-toolbar"><input id="property-search" type="search" aria-label="Search properties" placeholder="Search properties…" value="{}"><button type="button" class="button outline small" data-property-code="">{}Add property</button></div>"#, h(&crate::property_panel::search()), icon("plus", 14)));
     if rendered {
         content.push_str(r#"<p class="inspect-note">Edits apply to every instance created by this Dart constructor.</p>"#);
     }
     if !properties.is_empty() {
         content.push_str(&format!(
             r#"<div class="inspect-group"><h3>Appearance &amp; layout</h3>{properties}</div>"#
+        ));
+    }
+    if !items(&node["arguments"]).is_empty() {
+        let arguments: String = items(&node["arguments"]).iter().map(property).collect();
+        content.push_str(&format!(
+            r#"<div class="inspect-group"><h3>Other properties</h3>{arguments}</div>"#
         ));
     }
     let slots = items(&node["slots"]);
@@ -433,6 +459,7 @@ pub fn inspector(state: &State) {
         content.push_str(&format!(r#"<div class="inspect-group"><h3>Add widget</h3><select id="insert-slot" aria-label="Child slot">{options}</select><div class="add-row"><select id="insert-widget" aria-label="Widget to add">{widgets}</select><button type="button" data-widget-action="add" class="button outline small">{}Add</button></div></div>"#, icon("plus", 16)));
     }
     html("inspector", content);
+    crate::property_panel::filter();
 }
 
 pub fn widget_options(node: &Value, slot: &str) -> String {

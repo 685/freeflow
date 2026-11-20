@@ -93,6 +93,9 @@ pub(crate) enum View {
         project: String,
         widget: Value,
     },
+    WidgetProperty {
+        context: crate::property_panel::Context,
+    },
     NewFile {
         project: String,
     },
@@ -106,6 +109,9 @@ fn dialog() -> HtmlDialogElement {
 }
 fn view() -> (u64, View) {
     MODAL.with_borrow(Clone::clone)
+}
+pub(crate) fn version() -> u64 {
+    MODAL.with_borrow(|view| view.0)
 }
 pub(crate) fn current_view(version: u64) -> bool {
     dialog().open() && MODAL.with_borrow(|view| view.0 == version)
@@ -1027,6 +1033,9 @@ fn form_data(form: &Element) -> Value {
 
 async fn submit_view(view: View, version: u64, mut input: Value) -> Result {
     match view {
+        View::WidgetProperty { context } => {
+            crate::property_panel::submit(&context, version, input).await?
+        }
         View::PhonePreview { project } if current(&project) => {
             crate::phone_preview::submit(&project, input).await?;
         }
@@ -1119,6 +1128,9 @@ async fn submit_view(view: View, version: u64, mut input: Value) -> Result {
 
 async fn act(view: View, version: u64, action: &str, element: &Element) -> Result {
     match view {
+        View::WidgetProperty { context } => {
+            crate::property_panel::act(&context, version, action).await?
+        }
         View::PhonePreview { project } if current(&project) => {
             crate::phone_preview::act(&project, version, action).await?;
         }

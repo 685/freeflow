@@ -24,6 +24,141 @@ fn fixture() -> (tempfile::TempDir, projects::Projects, projects::Project) {
 }
 
 #[test]
+fn property_expressions_edit_callbacks_and_nested_values_without_replacing_other_source() {
+    let source = "// 😀 keep UTF-16 IDs\r\nWidget build() => Text(title, style: const ui.TextStyle(fontSize: baseSize, color: Colors.red), maxLines: 2 /* keep this note */, semanticsLabel: 'keep');";
+    let node = visual::outline(source).unwrap()["nodes"][0].clone();
+    assert_eq!(node["type"], "Text");
+    let details =
+        visual::property_details(source, node["id"].as_str().unwrap(), "fontSize").unwrap();
+    assert_eq!(details["expression"], "baseSize");
+    assert_eq!(
+        details["offset"],
+        source[..source.find("baseSize").unwrap()]
+            .encode_utf16()
+            .count()
+    );
+    let changed = visual::edit(source, &json!({"id":node["id"],"operation":"expression","name":"fontSize","expression":"enabled ? 24 : 16"})).unwrap();
+    assert_eq!(changed, source.replace("baseSize", "enabled ? 24 : 16"));
+    let changed = visual::edit(source, &json!({"id":node["id"],"operation":"expression","name":"style.letterSpacing","expression":"1.5"})).unwrap();
+    assert!(changed.contains("color: Colors.red, letterSpacing: 1.5)"));
+    assert!(changed.contains("2 /* keep this note */"));
+    let positional = visual::edit(source, &json!({"id":node["id"],"operation":"expression","name":"text","expression":"enabled ? 'On' : 'Off'"})).unwrap();
+    assert_eq!(
+        positional,
+        source.replace("Text(title,", "Text(enabled ? 'On' : 'Off',")
+    );
+    let callback_source = "Widget build() => TextButton(onPressed: () { /* preserve */ print('before'); }, child: const Text('Keep'));";
+    let button = visual::outline(callback_source).unwrap()["nodes"][0].clone();
+    let callback = "() { setState(() => count++); print('after'); }";
+    let changed = visual::edit(callback_source, &json!({"id":button["id"],"operation":"expression","name":"onPressed","expression":callback})).unwrap();
+    assert_eq!(
+        changed,
+        callback_source.replace("() { /* preserve */ print('before'); }", callback)
+    );
+    assert_eq!(
+        visual::property_details(&changed, button["id"].as_str().unwrap(), "onPressed").unwrap()["expression"],
+        callback
+    );
+}
+
+#[test]
+fn property_resets_preserve_comments_and_cannot_remove_positional_values() {
+    for source in [
+        "Widget build() => Text('Keep', maxLines: 2);",
+        "Widget build() => Text('Keep', /* before */ maxLines: 2 /* after */);",
+        "Widget build() => Text('Keep', maxLines: 2, semanticsLabel: 'Keep',);",
+        "Widget build() => Container(width: 10);",
+    ] {
+        let node = visual::outline(source).unwrap()["nodes"][0].clone();
+        let name = if node["type"] == "Container" {
+            "width"
+        } else {
+            "maxLines"
+        };
+        let changed = visual::edit(
+            source,
+            &json!({"id":node["id"],"operation":"expression","name":name,"remove":true}),
+        )
+        .unwrap();
+        assert!(!changed.contains(&format!("{name}:")));
+        if source.contains("before") {
+            assert!(changed.contains("/* before */") && changed.contains("/* after */"));
+        }
+        assert!(
+            !visual::outline(&changed).unwrap()["nodes"]
+                .as_array()
+                .unwrap()
+                .is_empty()
+        );
+        assert!(
+            visual::edit(
+                source,
+                &json!({"id":node["id"],"operation":"expression","name":"text","remove":true})
+            )
+            .is_err()
+                || node["type"] == "Container"
+        );
+    }
+    let source =
+        "Widget build() => Text('Keep', style: const TextStyle(color: Colors.red, fontSize: 24));";
+    let node = visual::outline(source).unwrap()["nodes"][0].clone();
+    let changed = visual::edit(
+        source,
+        &json!({"id":node["id"],"operation":"expression","name":"fontSize","remove":true}),
+    )
+    .unwrap();
+    assert_eq!(
+        changed,
+        "Widget build() => Text('Keep', style: const TextStyle(color: Colors.red ));"
+    );
+}
+
+#[test]
+fn property_expression_inputs_cannot_escape_the_selected_argument() {
+    let source = "Widget build() => Text(title, style: sharedStyle);";
+    let node = visual::outline(source).unwrap()["nodes"][0].clone();
+    for expression in [
+        "",
+        "// comment only",
+        "1, maxLines: 99",
+        "1,",
+        "Text('unclosed'",
+        "1); runSomething(); f(",
+        "1; runSomething()",
+        "'unterminated",
+        "[1, 2}",
+    ] {
+        assert!(visual::edit(source, &json!({"id":node["id"],"operation":"expression","name":"text","expression":expression})).is_err(), "{expression}");
+    }
+    for name in ["", "a..b", "a:b", "a/b", "a);evil", "2invalid"] {
+        assert!(
+            visual::edit(
+                source,
+                &json!({"id":node["id"],"operation":"expression","name":name,"expression":"1"})
+            )
+            .is_err()
+        );
+    }
+    assert!(
+        visual::edit(
+            source,
+            &json!({"id":node["id"],"operation":"expression","name":"fontSize","expression":"24"})
+        )
+        .is_err()
+    );
+    let changed = visual::edit(source, &json!({"id":node["id"],"operation":"expression","name":"text","expression":"title // keep a trailing comment"})).unwrap();
+    assert!(changed.contains("title // keep a trailing comment\n, style: sharedStyle"));
+    let (draft, offset) =
+        visual::property_completion(source, node["id"].as_str().unwrap()).unwrap();
+    let bytes = draft
+        .char_indices()
+        .find_map(|(index, _)| (draft[..index].encode_utf16().count() == offset).then_some(index))
+        .unwrap();
+    assert!(draft[..bytes].ends_with(",\n  "));
+    assert_eq!(source, "Widget build() => Text(title, style: sharedStyle);");
+}
+
+#[test]
 fn project_rules_follow_file_scope_and_remain_visible_to_the_editor() {
     let (_home, projects, project) = fixture();
     fs::create_dir_all(project.root.join("lib/features")).unwrap();

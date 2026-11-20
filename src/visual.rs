@@ -7,6 +7,9 @@ use std::{
     sync::LazyLock,
 };
 
+mod properties;
+pub use properties::{property_completion, property_details};
+
 #[derive(Deserialize)]
 struct Field {
     name: String,
@@ -784,7 +787,17 @@ pub fn outline(source: &str) -> Result<Value> {
             entry["name"] = json!(item.name);
             entry["type"] = json!(item.kind);
             entry["options"] = json!(item.options);
+            let (editable, present, removable) = properties::access(node, &tokens, &item.name);
+            entry["present"] = json!(present);
+            entry["codeEditable"] = json!(editable);
+            entry["removable"] = json!(removable);
             entry
+        }).collect();
+        let arguments: Vec<_> = node.args.iter().filter_map(|arg| {
+            let name = arg.name?;
+            if node.spec.fields.iter().any(|field| field.nest.is_none() && field.name == name) { return None; }
+            Some(json!({"name":name,"type":"expression","expression":arg.expression(&tokens, source).chars().take(200).collect::<String>(),
+                "editable":false,"codeEditable":true,"present":true,"removable":true}))
         }).collect();
         let slots: Vec<_> = node.slots().iter().filter(|(name, multiple)| {
             node.args.iter().copied().find(|arg| arg.name == Some(name))
@@ -799,7 +812,7 @@ pub fn outline(source: &str) -> Result<Value> {
         let kind = if node.constructor.is_empty() { node.kind.to_owned() } else { format!("{}.{}", node.kind, node.constructor) };
         json!({ "id": node.id, "type": kind, "line": node.line, "column": node.column,
             "parent": parent.map(|parent| &parent.id), "label": label,
-            "slots": slots, "slotChoices": choices, "properties": properties, "removable": membership.is_some(),
+            "slots": slots, "slotChoices": choices, "properties": properties, "arguments":arguments, "removable": membership.is_some(),
             "movable": membership.as_ref().is_some_and(|entry| entry.list.is_some()),
             "listSlot": membership.as_ref().and_then(|entry| entry.slot), "wrappable": !typed_app_bar })
     }).collect();
@@ -1339,6 +1352,7 @@ pub fn edit(source: &str, command: &Value) -> Result<String> {
         )
     };
     match field("operation") {
+        "expression" => properties::edit_expression(source, &tokens, node, command),
         "paste" => insert_widget(
             source,
             &tokens,

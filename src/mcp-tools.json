@@ -1,5 +1,22 @@
 [
   {
+    "name": "read_widget_property",
+    "description": "Read the full Dart expression for one property of a selected widget, including callbacks and nested constructor values. Use the widget ID and revision from inspect_widgets. Catalog names such as text or fontSize work; other named arguments and dotted paths such as style.letterSpacing are also supported.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "projectId": { "type": "string", "description": "Project ID from list_projects. Omit on a project-scoped connection." },
+        "path": { "type": "string" },
+        "id": { "type": "string" },
+        "revision": { "type": "string" },
+        "name": { "type": "string" }
+      },
+      "required": ["path", "id", "revision", "name"],
+      "additionalProperties": false
+    },
+    "annotations": { "readOnlyHint": true, "openWorldHint": false }
+  },
+  {
     "name": "read_project_rules",
     "description": "Read applicable AGENTS.md, CLAUDE.md, ARCHITECTURE.md and .cursorrules files. Root rules apply to the project; rules in ancestor directories of path are returned from broadest to closest scope. Large files return marked excerpts. Read this before creating files.",
     "inputSchema": {
@@ -224,6 +241,7 @@
             "operation": {
               "enum": [
                 "property",
+                "expression",
                 "add",
                 "wrap",
                 "remove",
@@ -234,7 +252,15 @@
             },
             "name": {
               "type": "string",
-              "description": "Property name for a property edit."
+              "description": "Property name for a property or expression edit. Expression edits also support arbitrary named arguments and dotted paths inside explicit constructor calls."
+            },
+            "expression": {
+              "type": "string",
+              "description": "One complete Dart expression, up to 64 KiB, for operation expression. Read the existing source or read_widget_property first. This explicitly replaces an existing expression. Dart analysis and compilation determine type correctness."
+            },
+            "remove": {
+              "type": "boolean",
+              "description": "For operation expression, remove the named property to restore its default. Omit expression when true. Positional values cannot be removed."
             },
             "branch": {
               "type": "string",

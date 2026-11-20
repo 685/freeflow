@@ -268,6 +268,27 @@ pub fn widget_snippet(projects: &Projects, project: &Project, input: &Value) -> 
     visual::snippet(&source.content, required(input, "id")?)
 }
 
+pub fn widget_property(projects: &Projects, project: &Project, input: &Value) -> Result<Value> {
+    let path = required(input, "path")?;
+    if !path.ends_with(".dart") {
+        return Err(Problem::new(400, "Select a Dart file."));
+    }
+    let source = projects.file(project, path)?;
+    if source.revision.as_deref() != revision(input)? {
+        return Err(Problem::new(
+            409,
+            "The source changed. Refresh the widget before reading its property.",
+        ));
+    }
+    let mut data = visual::property_details(
+        &source.content,
+        required(input, "id")?,
+        required(input, "name")?,
+    )?;
+    data["revision"] = json!(source.revision);
+    Ok(data)
+}
+
 fn quote(value: &str) -> String {
     if cfg!(windows) {
         format!("'{}'", value.replace('\'', "''"))
@@ -579,6 +600,51 @@ async fn project_route(
         let (code, value) = match part {
             "widgets" => (200, write_widgets(projects, &project, &input)?),
             "widget-snippet" => (200, widget_snippet(projects, &project, &input)?),
+            "widget-property" => {
+                let path = required(&input, "path")?;
+                if !path.ends_with(".dart") {
+                    return Err(Problem::new(400, "Select a Dart file."));
+                }
+                let source = projects.file(&project, path)?;
+                if source.revision.as_deref() != revision(&input)? {
+                    return Err(Problem::new(
+                        409,
+                        "The source changed. Refresh the widget before editing its properties.",
+                    ));
+                }
+                let id = required(&input, "id")?;
+                let mut result = match input["action"].as_str().unwrap_or("read") {
+                    "read" => {
+                        visual::property_details(&source.content, id, required(&input, "name")?)?
+                    }
+                    "suggest" => {
+                        let (text, offset) = visual::property_completion(&source.content, id)?;
+                        state.analyzers.editor(jobs, &project, &json!({"action":"properties","path":path,"text":text,"offset":offset})).await?
+                    }
+                    "check" => {
+                        let code = visual::edit(
+                            &source.content,
+                            &json!({"id":id,"operation":"expression","name":input["name"],"expression":input["expression"],"remove":input["remove"]}),
+                        )?;
+                        state
+                            .analyzers
+                            .editor(
+                                jobs,
+                                &project,
+                                &json!({"action":"diagnose","path":path,"text":code}),
+                            )
+                            .await?
+                    }
+                    _ => {
+                        return Err(Problem::new(
+                            400,
+                            "Choose read, suggest or check for the property.",
+                        ));
+                    }
+                };
+                result["revision"] = json!(source.revision);
+                (200, result)
+            }
             "preview-logs" => (200, jobs.preview_logs(&project, &input)?),
             "edits" => (
                 200,

@@ -9,6 +9,7 @@ mod planner;
 mod preview_canvas;
 mod preview_inspector;
 mod preview_logs;
+mod property_panel;
 mod saved_edits;
 mod source_control;
 mod state;
@@ -1006,6 +1007,13 @@ fn inspector_events() {
         };
         let kind = input.get_attribute("data-type").unwrap_or_default();
         if raw.is_empty() && kind != "string" {
+            if input
+                .get_attribute("data-branch")
+                .unwrap_or_default()
+                .is_empty()
+            {
+                ui::spawn(property_panel::reset(property));
+            }
             return;
         }
         let value = match kind.as_str() {
@@ -1092,6 +1100,7 @@ fn start() -> std::result::Result<(), JsValue> {
     saved_edits::initialize();
     preview_canvas::initialize();
     agent_panel::initialize();
+    property_panel::initialize();
     ui::click("run-device", || ui::spawn(device_panel::open()));
     planner::initialize();
     ui::click("app-theme", || ui::spawn(theme::open(None)));

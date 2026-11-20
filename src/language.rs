@@ -56,7 +56,10 @@ impl Analyzers {
 
     pub async fn editor(&self, jobs: &Jobs, project: &Project, input: &Value) -> Result<Value> {
         let action = required(input, "action")?;
-        if !matches!(action, "complete" | "diagnose" | "definition" | "hover") {
+        if !matches!(
+            action,
+            "complete" | "properties" | "diagnose" | "definition" | "hover"
+        ) {
             return Err(Problem::new(400, "Choose a Dart editor action."));
         }
         let path = required(input, "path")?;
@@ -189,6 +192,8 @@ struct Analyzer {
     next_id: u64,
     last: Instant,
     documents: HashMap<String, Document>,
+    workspace_analysis_complete: bool,
+    analysis_idle: bool,
 }
 
 impl Analyzer {
@@ -203,8 +208,10 @@ impl Analyzer {
             last: Instant::now(),
             next_id: 0,
             documents: HashMap::new(),
+            workspace_analysis_complete: false,
+            analysis_idle: false,
         };
-        server
+        let initialized = server
             .request(
                 "initialize",
                 json!({
@@ -222,6 +229,8 @@ impl Analyzer {
                 }),
             )
             .await?;
+        server.workspace_analysis_complete =
+            initialized["capabilities"]["experimental"]["workspaceAnalysisComplete"] == true;
         server.notify("initialized", json!({})).await?;
         Ok(server)
     }
@@ -269,7 +278,9 @@ impl Analyzer {
     }
 
     async fn event(&mut self, message: &Value) -> Result<()> {
-        if message["method"] == "textDocument/publishDiagnostics" {
+        if message["method"] == "$/analyzerStatus" {
+            self.analysis_idle = message["params"]["isAnalyzing"] == false;
+        } else if message["method"] == "textDocument/publishDiagnostics" {
             let params = &message["params"];
             if let Some(uri) = params["uri"].as_str()
                 && let Some(document) = self.documents.get_mut(uri)
@@ -302,22 +313,31 @@ impl Analyzer {
     }
 
     async fn request(&mut self, method: &str, params: Value) -> Result<Value> {
-        self.next_id += 1;
-        let id = self.next_id;
-        self.send(json!({"jsonrpc":"2.0","id":id,"method":method,"params":params}))
-            .await?;
         loop {
-            let message = self.receive().await?;
-            if message["id"] == id && message.get("method").is_none() {
-                if !message["error"].is_null() {
-                    return Err(Problem::new(
-                        422,
-                        "The Dart analyzer could not finish this editor request.",
-                    ));
+            self.next_id += 1;
+            let id = self.next_id;
+            self.send(json!({"jsonrpc":"2.0","id":id,"method":method,"params":params}))
+                .await?;
+            loop {
+                let message = self.receive().await?;
+                if message["id"] == id && message.get("method").is_none() {
+                    if message["error"].is_null() {
+                        return Ok(message["result"].clone());
+                    }
+                    // A new workspace may not have registered the opened file yet.
+                    // The enclosing editor timeout bounds this startup retry.
+                    if message["error"]["code"] == -32007 {
+                        time::sleep(Duration::from_millis(100)).await;
+                        break;
+                    }
+                    let detail = message["error"]["message"]
+                        .as_str()
+                        .map(|text| text.chars().take(600).collect::<String>())
+                        .unwrap_or_else(|| "The request could not be completed.".into());
+                    return Err(Problem::new(422, format!("Dart analysis: {detail}")));
                 }
-                return Ok(message["result"].clone());
+                self.event(&message).await?;
             }
-            self.event(&message).await?;
         }
     }
 
@@ -331,6 +351,7 @@ impl Analyzer {
             document.version += 1;
             document.revision = revision;
             document.diagnostics = None;
+            self.analysis_idle = false;
             let version = document.version;
             return self.notify("textDocument/didChange", json!({
                 "textDocument":{"uri":uri,"version":version},"contentChanges":[{"text":text}]
@@ -347,6 +368,7 @@ impl Analyzer {
             self.notify("textDocument/didClose", json!({"textDocument":{"uri":old}}))
                 .await?;
         }
+        self.analysis_idle = false;
         self.documents.insert(
             uri.to_owned(),
             Document {
@@ -382,16 +404,16 @@ impl Analyzer {
                 let values = self.documents[uri].diagnostics.as_ref().unwrap();
                 Ok(json!({"diagnostics":diagnostics(values)}))
             }
-            "complete" => {
+            "complete" | "properties" => {
                 let mut result = self
                     .request("textDocument/completion", params.clone())
                     .await?;
                 let prefix = input_prefix(text, position).unwrap_or_default();
-                let mut items = completions(&result, prefix);
+                let mut items = completions(&result, prefix, action == "properties");
                 if items.is_empty() && self.documents[uri].diagnostics.is_none() {
                     self.wait_for_diagnostics(uri).await?;
                     result = self.request("textDocument/completion", params).await?;
-                    items = completions(&result, prefix);
+                    items = completions(&result, prefix, action == "properties");
                 }
                 Ok(json!({"items":items}))
             }
@@ -407,10 +429,34 @@ impl Analyzer {
     }
 
     async fn wait_for_diagnostics(&mut self, uri: &str) -> Result<()> {
-        while self.documents[uri].diagnostics.is_none() {
-            let event = self.receive().await?;
-            self.event(&event).await?;
+        if self.documents[uri].diagnostics.is_some() {
+            return Ok(());
         }
+        if self.workspace_analysis_complete {
+            self.request("dart/workspace/analysis/complete", Value::Null)
+                .await?;
+        } else {
+            // Older Dart SDKs omit empty diagnostics. Wait for analysis, resolve
+            // the latest overlay and consume its analysis-complete notification.
+            while !self.analysis_idle {
+                let event = self.receive().await?;
+                self.event(&event).await?;
+            }
+            self.request(
+                "textDocument/hover",
+                json!({"textDocument":{"uri":uri},"position":{"line":0,"character":0}}),
+            )
+            .await?;
+            while !self.analysis_idle {
+                let event = self.receive().await?;
+                self.event(&event).await?;
+            }
+        }
+        self.documents
+            .get_mut(uri)
+            .unwrap()
+            .diagnostics
+            .get_or_insert_with(|| json!([]));
         Ok(())
     }
 }
@@ -438,7 +484,7 @@ fn input_prefix(source: &str, position: Position) -> Option<&str> {
     )
 }
 
-fn completions(result: &Value, prefix: &str) -> Vec<Value> {
+fn completions(result: &Value, prefix: &str, properties: bool) -> Vec<Value> {
     let list = result.as_array().or_else(|| result["items"].as_array());
     let defaults = &result["itemDefaults"];
     let prefix = prefix.to_lowercase();
@@ -453,6 +499,16 @@ fn completions(result: &Value, prefix: &str) -> Vec<Value> {
         })
         .filter_map(|item| {
             let label = clip(&item["label"], 200)?;
+            if properties {
+                let name = label.trim_end().strip_suffix(':')?.trim();
+                if name.is_empty()
+                    || !name
+                        .bytes()
+                        .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'$'))
+                {
+                    return None;
+                }
+            }
             let edit = &item["textEdit"];
             let text = clip(&edit["newText"], 4000)
                 .or_else(|| clip(&item["textEditText"], 4000))
@@ -489,7 +545,7 @@ fn completions(result: &Value, prefix: &str) -> Vec<Value> {
     items.sort_by(|a, b| (a.0, &a.1).cmp(&(b.0, &b.1)));
     items
         .into_iter()
-        .take(40)
+        .take(if properties { 200 } else { 40 })
         .map(|(_, _, item)| item)
         .collect()
 }
@@ -561,6 +617,19 @@ fn hover(contents: &Value) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn property_suggestions_keep_named_parameters_before_applying_the_result_limit() {
+        let mut input: Vec<_> = (0..80)
+            .map(|index| json!({"label":format!("class{index}"),"insertText":"anything"}))
+            .collect();
+        input
+            .push(json!({"label":"maxLines: ","insertText":"maxLines: ","detail":"int? maxLines"}));
+        let result = completions(&json!({"items":input}), "", true);
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0]["label"], "maxLines: ");
+        assert_eq!(completions(&json!({"items":input}), "", false).len(), 40);
+    }
 
     #[test]
     fn dart_positions_follow_utf16_with_crlf_and_emoji() {
