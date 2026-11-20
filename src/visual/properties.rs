@@ -135,8 +135,18 @@ fn target<'a>(node: &Node<'a>, tokens: &[Token<'a>], name: &str) -> Result<Targe
     })
 }
 
+#[cfg(test)]
 pub fn property_details(source: &str, id: &str, name: &str) -> Result<Value> {
-    let (tokens, nodes) = inspect(source)?;
+    property_details_in(source, id, name, &Scope::default())
+}
+
+pub(crate) fn property_details_in(
+    source: &str,
+    id: &str,
+    name: &str,
+    scope: &Scope,
+) -> Result<Value> {
+    let (tokens, nodes) = inspect_in(source, scope)?;
     let node = nodes
         .iter()
         .find(|node| node.id == id)
@@ -159,8 +169,17 @@ pub fn property_details(source: &str, id: &str, name: &str) -> Result<Value> {
     )
 }
 
+#[cfg(test)]
 pub fn property_completion(source: &str, id: &str) -> Result<(String, usize)> {
-    let (tokens, nodes) = inspect(source)?;
+    property_completion_in(source, id, &Scope::default())
+}
+
+pub(crate) fn property_completion_in(
+    source: &str,
+    id: &str,
+    scope: &Scope,
+) -> Result<(String, usize)> {
+    let (tokens, nodes) = inspect_in(source, scope)?;
     let node = nodes
         .iter()
         .find(|node| node.id == id)

@@ -111,7 +111,8 @@ pub fn resolve(projects: &Projects, project: &Project, input: &Value) -> Result<
             .unwrap_or_default();
         let Some((source, outline)) = sources.entry(path.clone()).or_insert_with(|| {
             let source = projects.file(project, &path).ok()?;
-            let outline = visual::outline(&source.content).unwrap_or_default();
+            let scope = visual::Scope::for_source(project, &path, &source.content);
+            let outline = visual::outline_in(&source.content, &scope).unwrap_or_default();
             Some((source, outline))
         }) else {
             continue;

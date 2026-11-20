@@ -58,7 +58,7 @@ impl Analyzers {
         let action = required(input, "action")?;
         if !matches!(
             action,
-            "complete" | "properties" | "diagnose" | "definition" | "hover"
+            "complete" | "properties" | "diagnose" | "definition" | "references" | "hover"
         ) {
             return Err(Problem::new(400, "Choose a Dart editor action."));
         }
@@ -351,7 +351,6 @@ impl Analyzer {
             document.version += 1;
             document.revision = revision;
             document.diagnostics = None;
-            self.analysis_idle = false;
             let version = document.version;
             return self.notify("textDocument/didChange", json!({
                 "textDocument":{"uri":uri,"version":version},"contentChanges":[{"text":text}]
@@ -368,7 +367,6 @@ impl Analyzer {
             self.notify("textDocument/didClose", json!({"textDocument":{"uri":old}}))
                 .await?;
         }
-        self.analysis_idle = false;
         self.documents.insert(
             uri.to_owned(),
             Document {
@@ -418,8 +416,19 @@ impl Analyzer {
                 Ok(json!({"items":items}))
             }
             "definition" => {
+                self.wait_for_diagnostics(uri).await?;
                 let result = self.request("textDocument/definition", params).await?;
-                Ok(json!({"locations":definitions(&result, projects, project, uri, text)}))
+                Ok(json!({"locations":definitions(&result, projects, project, uri, text, 5)}))
+            }
+            "references" => {
+                self.wait_for_diagnostics(uri).await?;
+                let mut params = params;
+                params["context"] = json!({"includeDeclaration":false});
+                let result = self.request("textDocument/references", params).await?;
+                let locations = definitions(&result, projects, project, uri, text, 200);
+                Ok(
+                    json!({"locations":locations,"truncated":result.as_array().is_some_and(|items| items.len() > 200)}),
+                )
             }
             _ => {
                 let result = self.request("textDocument/hover", params).await?;
@@ -438,10 +447,6 @@ impl Analyzer {
         } else {
             // Older Dart SDKs omit empty diagnostics. Wait for analysis, resolve
             // the latest overlay and consume its analysis-complete notification.
-            while !self.analysis_idle {
-                let event = self.receive().await?;
-                self.event(&event).await?;
-            }
             self.request(
                 "textDocument/hover",
                 json!({"textDocument":{"uri":uri},"position":{"line":0,"character":0}}),
@@ -570,6 +575,7 @@ fn definitions(
     project: &Project,
     current_uri: &str,
     current_text: &str,
+    limit: usize,
 ) -> Vec<Value> {
     let entries = result
         .as_array()
@@ -595,7 +601,7 @@ fn definitions(
             };
             Some(json!({"path":path,"line":position.line+1,"offset":offset(text,position)?}))
         })
-        .take(5)
+        .take(limit)
         .collect()
 }
 

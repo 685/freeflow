@@ -223,8 +223,20 @@ fn widget_rows(
         } else {
             "data-widget"
         };
-        output.push_str(&format!(r#"<button type="button" class="tree-row{}" {attribute}="{}" style="--depth:{}" draggable="{}" aria-pressed="{selected}" title="{title}">{chevron}<span class="tree-symbol">{}</span><span class="tree-label ellipsis">{}</span>{hint}</button>"#,
-            if selected { " selected" } else { "" }, h(id), depth.min(10), !rendered && node["removable"] == true, icon(widget_icon(kind), 16), h(kind)));
+        let definition = node["ownerComponent"]["widget"] == id;
+        let component = node["component"] == true
+            || definition
+            || rendered
+                && items(&state.visual["componentTypes"])
+                    .iter()
+                    .any(|name| name.as_str() == Some(kind.split('<').next().unwrap_or(kind)));
+        let caption = if definition {
+            format!("{} · {kind}", string(&node["ownerComponent"]["name"]))
+        } else {
+            kind.to_owned()
+        };
+        output.push_str(&format!(r#"<button type="button" class="tree-row{}{}" {attribute}="{}" style="--depth:{}" draggable="{}" aria-pressed="{selected}" title="{title}">{chevron}<span class="tree-symbol">{}</span><span class="tree-label ellipsis">{}</span>{hint}</button>"#,
+            if selected { " selected" } else { "" }, if component { " component-row" } else { "" }, h(id), depth.min(10), !rendered && node["removable"] == true, icon(if component { "component" } else { widget_icon(kind) }, 16), h(&caption)));
         if children && !collapsed {
             widget_rows(state, groups, id, depth + 1, rendered, output);
         }
@@ -396,7 +408,8 @@ pub fn inspector(state: &State) {
         html(
             "inspector",
             format!(
-                r#"<div class="inspector-empty">{}<strong>Select a widget</strong><p>{hint}</p></div>"#,
+                r#"{}<div class="inspector-empty">{}<strong>Select a widget</strong><p>{hint}</p></div>"#,
+                crate::component_panel::navigation(state),
                 icon("cursor", 16)
             ),
         );
@@ -434,6 +447,7 @@ pub fn inspector(state: &State) {
     }
     content.push_str("</div></div>");
     content.push_str(&crate::widget_clipboard::controls(node, false));
+    content.push_str(&crate::component_panel::controls(node, false));
     content.push_str(&format!(r#"<div class="property-toolbar"><input id="property-search" type="search" aria-label="Search properties" placeholder="Search properties…" value="{}"><button type="button" class="button outline small" data-property-code="">{}Add property</button></div>"#, h(&crate::property_panel::search()), icon("plus", 14)));
     if rendered {
         content.push_str(r#"<p class="inspect-note">Edits apply to every instance created by this Dart constructor.</p>"#);
@@ -458,7 +472,10 @@ pub fn inspector(state: &State) {
         let widgets = widget_options(node, string(first));
         content.push_str(&format!(r#"<div class="inspect-group"><h3>Add widget</h3><select id="insert-slot" aria-label="Child slot">{options}</select><div class="add-row"><select id="insert-widget" aria-label="Widget to add">{widgets}</select><button type="button" data-widget-action="add" class="button outline small">{}Add</button></div></div>"#, icon("plus", 16)));
     }
-    html("inspector", content);
+    html(
+        "inspector",
+        format!("{}{content}", crate::component_panel::navigation(state)),
+    );
     crate::property_panel::filter();
 }
 

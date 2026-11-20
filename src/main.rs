@@ -1,6 +1,7 @@
 mod agent;
 mod archive;
 mod backends;
+mod components;
 mod deploy;
 mod devices;
 mod edits;

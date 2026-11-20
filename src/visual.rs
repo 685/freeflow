@@ -7,8 +7,13 @@ use std::{
     sync::LazyLock,
 };
 
+mod components;
 mod properties;
+pub(crate) use components::Scope;
+pub(crate) use components::component_at;
+#[cfg(test)]
 pub use properties::{property_completion, property_details};
+pub(crate) use properties::{property_completion_in, property_details_in};
 
 #[derive(Deserialize)]
 struct Field {
@@ -532,6 +537,8 @@ struct Node<'a> {
     start: usize,
     line: usize,
     column: usize,
+    symbol: usize,
+    component: bool,
     parent: Option<usize>,
     args: Vec<Arg<'a>>,
     spec: &'static Spec,
@@ -550,44 +557,13 @@ impl Node<'_> {
 }
 
 fn inspect(source: &str) -> Result<(Vec<Token<'_>>, Vec<Node<'_>>)> {
+    inspect_in(source, &Scope::default())
+}
+
+fn inspect_in<'a>(source: &'a str, scope: &Scope) -> Result<(Vec<Token<'a>>, Vec<Node<'a>>)> {
     let tokens = tokenize(source)?;
-    let custom: HashSet<_> = tokens
-        .iter()
-        .enumerate()
-        .filter_map(|(index, token)| {
-            if token.text != "class" {
-                return None;
-            }
-            let mut cursor = index + 2;
-            if at(&tokens, cursor) == "<" {
-                let mut depth = 0;
-                while cursor < tokens.len() {
-                    match at(&tokens, cursor) {
-                        "<" => depth += 1,
-                        ">" => depth -= 1,
-                        "{" | ";" => break,
-                        _ => {}
-                    }
-                    cursor += 1;
-                    if depth == 0 {
-                        break;
-                    }
-                }
-            }
-            if at(&tokens, cursor) != "extends" {
-                return None;
-            }
-            cursor += 1;
-            if at(&tokens, cursor + 1) == "." {
-                cursor += 2;
-            }
-            matches!(
-                at(&tokens, cursor),
-                "StatelessWidget" | "StatefulWidget" | "ConsumerWidget" | "HookWidget"
-            )
-            .then(|| at(&tokens, index + 1))
-        })
-        .collect();
+    let mut custom = scope.names.clone();
+    components::add_names(&components::classes(&tokens), &mut custom);
     let mut nodes: Vec<Node<'_>> = vec![];
     let mut parents: Vec<usize> = vec![];
     let (mut last_start, mut line, mut line_start, mut position) = (0, 1, 0, 0);
@@ -657,6 +633,8 @@ fn inspect(source: &str) -> Result<(Vec<Token<'_>>, Vec<Node<'_>>)> {
             start,
             line,
             column: source[line_start..token.start].encode_utf16().count() + 1,
+            symbol: source[..token.start].encode_utf16().count(),
+            component: custom.contains(kind),
             parent,
             args: args(&tokens, open),
             spec: CATALOG.widgets.get(kind).unwrap_or(&EMPTY),
@@ -777,8 +755,30 @@ fn slot_choices(node: &Node<'_>, slot: &str) -> Vec<&'static str> {
     }
 }
 
+#[cfg(test)]
 pub fn outline(source: &str) -> Result<Value> {
-    let (tokens, nodes) = inspect(source)?;
+    outline_in(source, &Scope::default())
+}
+
+pub(crate) fn outline_in(source: &str, scope: &Scope) -> Result<Value> {
+    let (tokens, nodes) = inspect_in(source, scope)?;
+    let mut owners = components::owners(source, &tokens, scope);
+    for owner in &mut owners {
+        if let Some((start, end)) = owner["buildStart"].as_u64().zip(owner["buildEnd"].as_u64()) {
+            owner["widget"] = nodes
+                .iter()
+                .find(|node| start <= node.symbol as u64 && (node.symbol as u64) < end)
+                .map_or(Value::Null, |node| json!(node.id));
+        }
+    }
+    let mut component_types = scope.names.clone();
+    component_types.extend(
+        owners
+            .iter()
+            .filter_map(|owner| owner["name"].as_str().map(str::to_owned)),
+    );
+    let mut component_types: Vec<_> = component_types.into_iter().collect();
+    component_types.sort();
     let output: Vec<_> = nodes.iter().map(|node| {
         let properties: Vec<_> = node.spec.fields.iter().map(|item| {
             let context = property(node, item, &tokens);
@@ -810,7 +810,10 @@ pub fn outline(source: &str) -> Result<Value> {
         let label = properties.iter().find(|item| matches!(item["name"].as_str(), Some("text" | "label")))
             .map(|item| &item["value"]);
         let kind = if node.constructor.is_empty() { node.kind.to_owned() } else { format!("{}.{}", node.kind, node.constructor) };
+        let owner = owners.iter().find(|owner| owner["symbol"].as_u64().unwrap_or(u64::MAX) <= node.symbol as u64 && (node.symbol as u64) < owner["end"].as_u64().unwrap_or_default());
         json!({ "id": node.id, "type": kind, "line": node.line, "column": node.column,
+            "symbol":node.symbol,"component":node.component,
+            "ownerComponent":owner,
             "parent": parent.map(|parent| &parent.id), "label": label,
             "slots": slots, "slotChoices": choices, "properties": properties, "arguments":arguments, "removable": membership.is_some(),
             "movable": membership.as_ref().is_some_and(|entry| entry.list.is_some()),
@@ -818,7 +821,8 @@ pub fn outline(source: &str) -> Result<Value> {
     }).collect();
     Ok(
         json!({ "palette": CATALOG.palette.iter().map(|(name, _)| name).collect::<Vec<_>>(),
-        "wrappers": CATALOG.wrappers.iter().map(|(name, _)| name).collect::<Vec<_>>(), "nodes": output }),
+        "wrappers": CATALOG.wrappers.iter().map(|(name, _)| name).collect::<Vec<_>>(), "nodes": output,
+        "componentScopeTruncated":scope.truncated,"components":owners,"componentTypes":component_types }),
     )
 }
 
@@ -1082,8 +1086,13 @@ pub fn edit_theme(source: &str, input: &Value) -> Result<String> {
     Ok(result)
 }
 
+#[cfg(test)]
 pub fn snippet(source: &str, id: &str) -> Result<Value> {
-    let (tokens, nodes) = inspect(source)?;
+    snippet_in(source, id, &Scope::default())
+}
+
+pub(crate) fn snippet_in(source: &str, id: &str, scope: &Scope) -> Result<Value> {
+    let (tokens, nodes) = inspect_in(source, scope)?;
     let node = nodes
         .iter()
         .find(|node| node.id == id)
@@ -1331,11 +1340,16 @@ fn remove_range(
     ))
 }
 
+#[cfg(test)]
 pub fn edit(source: &str, command: &Value) -> Result<String> {
+    edit_in(source, command, &Scope::default())
+}
+
+pub(crate) fn edit_in(source: &str, command: &Value, scope: &Scope) -> Result<String> {
     if !command.is_object() {
         return Err(Problem::new(400, "Choose a visual edit."));
     }
-    let (tokens, nodes) = inspect(source)?;
+    let (tokens, nodes) = inspect_in(source, scope)?;
     let field = |name| command[name].as_str().unwrap_or_default();
     let node = nodes
         .iter()
@@ -1546,9 +1560,10 @@ pub fn edit(source: &str, command: &Value) -> Result<String> {
                     offset
                 };
                 let target_id = output[..offset].encode_utf16().count().to_string();
-                return edit(
+                return edit_in(
                     &output,
                     &json!({"id":target_id,"operation":"paste","side":field("side"),"slot":field("slot"),"code":code}),
+                    scope,
                 );
             }
             let reorder = || Problem::new(422, "Reorder widgets within the same children list.");

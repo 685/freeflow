@@ -298,6 +298,16 @@ svg { display: block; flex-shrink: 0; }
 .property-check { font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
 .property-check:empty { display: none; }
 .property-check ul { padding-left: 18px; }
+.component-row .tree-symbol { color: var(--accent); }
+.component-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; padding: 9px 13px; border-bottom: 1px solid var(--border); }
+.component-controls > span { display: flex; align-items: center; gap: 5px; width: 100%; color: var(--accent); font-size: 11px; overflow-wrap: anywhere; }
+.component-navigation { padding: 9px 13px; border-bottom: 1px solid var(--border); background: var(--accent-soft); }
+.component-navigation > span { font-size: 11px; overflow-wrap: anywhere; }
+.component-navigation > div { display: flex; align-items: center; gap: 3px; margin-top: 5px; }
+.component-location { display: flex; flex-direction: column; gap: 5px; width: 100%; text-align: left; padding: 11px; margin-bottom: 7px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--panel); color: var(--ink); cursor: pointer; }
+.component-location:hover { border-color: var(--accent); background: var(--hover); }
+.component-location strong { font-size: 12px; overflow-wrap: anywhere; }
+.component-location code { white-space: pre-wrap; overflow-wrap: anywhere; color: var(--muted); font: 11px/1.5 var(--mono); }
 .inspect-note { margin: 0; padding: 9px 12px; color: var(--muted); font-size: 11px; line-height: 1.45; }
 .conditional-property { min-inline-size: 0; border: 1px solid var(--border); border-radius: 6px; padding: 7px; margin: 0 0 8px; }
 .conditional-property legend { padding: 0 4px; color: var(--muted); font-size: 11px; }

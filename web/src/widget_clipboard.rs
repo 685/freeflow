@@ -25,7 +25,9 @@ pub fn controls(node: &Value, menu: bool) -> String {
             if enabled { "" } else { " disabled" },
             if menu { format!("<span>Ctrl/⌘+{shortcut}</span>") } else { String::new() }));
     }
-    if !menu {
+    if menu {
+        output.push_str(&crate::component_panel::controls(node, true));
+    } else {
         output.push_str("</div>");
     }
     output

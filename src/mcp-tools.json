@@ -1,5 +1,39 @@
 [
   {
+    "name": "component_definition",
+    "description": "Resolve a project widget component to its class definition using the Dart SDK. Uses the selected instance by default, or its containing component for a build-method widget. A definition includes a source revision and its build widget where available. Read inspect_widgets first. Requires a configured Dart SDK and saved project source.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "projectId": { "type": "string" },
+        "path": { "type": "string" },
+        "revision": { "type": "string" },
+        "id": { "type": "string" },
+        "target": { "enum": ["instance", "owner"] }
+      },
+      "required": ["path", "revision", "id"],
+      "additionalProperties": false
+    },
+    "annotations": { "readOnlyHint": true, "openWorldHint": false }
+  },
+  {
+    "name": "component_references",
+    "description": "Find up to 200 semantic uses of a project widget component class across the project using the Dart SDK, including constructor calls and type references. Returns scoped source locations, file revisions and excerpts; a widget ID is included for constructor uses visible in the source tree. Read inspect_widgets first. Requires saved project source.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "projectId": { "type": "string" },
+        "path": { "type": "string" },
+        "revision": { "type": "string" },
+        "id": { "type": "string" },
+        "target": { "enum": ["instance", "owner"] }
+      },
+      "required": ["path", "revision", "id"],
+      "additionalProperties": false
+    },
+    "annotations": { "readOnlyHint": true, "openWorldHint": false }
+  },
+  {
     "name": "read_widget_property",
     "description": "Read the full Dart expression for one property of a selected widget, including callbacks and nested constructor values. Use the widget ID and revision from inspect_widgets. Catalog names such as text or fontSize work; other named arguments and dotted paths such as style.letterSpacing are also supported.",
     "inputSchema": {

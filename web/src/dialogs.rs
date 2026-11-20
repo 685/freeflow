@@ -96,6 +96,11 @@ pub(crate) enum View {
     WidgetProperty {
         context: crate::property_panel::Context,
     },
+    ComponentReferences {
+        project: String,
+        generation: u64,
+        result: Value,
+    },
     NewFile {
         project: String,
     },
@@ -1128,6 +1133,11 @@ async fn submit_view(view: View, version: u64, mut input: Value) -> Result {
 
 async fn act(view: View, version: u64, action: &str, element: &Element) -> Result {
     match view {
+        View::ComponentReferences {
+            project,
+            generation,
+            result,
+        } => crate::component_panel::act(&project, generation, &result, version, action).await?,
         View::WidgetProperty { context } => {
             crate::property_panel::act(&context, version, action).await?
         }

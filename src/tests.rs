@@ -24,6 +24,134 @@ fn fixture() -> (tempfile::TempDir, projects::Projects, projects::Project) {
 }
 
 #[test]
+fn project_component_imports_exports_and_inheritance_keep_widget_edits_available() {
+    let (_home, projects, project) = fixture();
+    fs::create_dir_all(project.root.join("lib/cards")).unwrap();
+    fs::write(project.root.join("lib/cards/base.dart"), "import 'package:flutter/widgets.dart'; abstract class BaseTile extends StatelessWidget { const BaseTile(); }").unwrap();
+    fs::write(project.root.join("lib/cards/tile.dart"), "import 'base.dart'; class Tile extends BaseTile { const Tile({required this.label}); const Tile.small({required this.label}); final String label; Widget build(context) => Text(label); }").unwrap();
+    fs::write(
+        project.root.join("lib/cards.dart"),
+        "export 'cards/tile.dart';",
+    )
+    .unwrap();
+    let source = "// 😀\r\nimport 'package:example_app/cards.dart' as ui; Widget build() => Column(children: [const ui.Tile(label: 'One'), const ui.Tile.small(label: 'Two')]);";
+    fs::write(project.root.join("lib/main.dart"), source).unwrap();
+    let tree = server::read_widgets(&projects, &project, "lib/main.dart").unwrap();
+    let tiles: Vec<_> = tree["nodes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|node| node["component"] == true)
+        .collect();
+    assert_eq!(tiles.len(), 2);
+    assert_eq!(tiles[0]["type"], "Tile");
+    assert_eq!(tiles[1]["type"], "Tile.small");
+    assert_eq!(
+        tiles[0]["symbol"],
+        source[..source.find("Tile(label").unwrap()]
+            .encode_utf16()
+            .count()
+    );
+    assert_eq!(tiles[0]["movable"], true);
+    let input = json!({"path":"lib/main.dart","revision":tree["revision"],"id":tiles[0]["id"],"name":"label"});
+    assert_eq!(
+        server::widget_property(&projects, &project, &input).unwrap()["expression"],
+        "'One'"
+    );
+    assert_eq!(
+        server::widget_snippet(&projects, &project, &input).unwrap()["code"],
+        "const ui.Tile(label: 'One')"
+    );
+    server::write_widgets(&projects, &project, &json!({"path":"lib/main.dart","revision":tree["revision"],"command":{"id":tiles[0]["id"],"operation":"expression","name":"label","expression":"'Changed'"}})).unwrap();
+    assert!(
+        projects
+            .file(&project, "lib/main.dart")
+            .unwrap()
+            .content
+            .contains("ui.Tile(label: 'Changed')")
+    );
+    let updated = server::read_widgets(&projects, &project, "lib/main.dart").unwrap();
+    server::write_widgets(&projects, &project, &json!({"path":"lib/main.dart","revision":updated["revision"],"command":{"id":tiles[0]["id"],"operation":"duplicate"}})).unwrap();
+    assert_eq!(
+        server::read_widgets(&projects, &project, "lib/main.dart").unwrap()["nodes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|node| node["component"] == true)
+            .count(),
+        3
+    );
+    assert_eq!(tree["componentScopeTruncated"], false);
+}
+
+#[test]
+fn component_definition_owners_include_state_builds_and_part_files() {
+    let (_home, projects, project) = fixture();
+    fs::create_dir_all(project.root.join("lib/parts")).unwrap();
+    let source = "import 'package:flutter/widgets.dart'; class Page extends StatefulWidget { const Page(); State<Page> createState() => _PageState(); } class _PageState extends State<Page> { Widget build(context) => Column(children: [Text('Owned')]); }";
+    fs::write(project.root.join("lib/main.dart"), source).unwrap();
+    let tree = server::read_widgets(&projects, &project, "lib/main.dart").unwrap();
+    let column = tree["nodes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|node| node["type"] == "Column")
+        .unwrap();
+    assert_eq!(column["ownerComponent"]["name"], "Page");
+    assert_eq!(column["ownerComponent"]["widget"], column["id"]);
+    let definition = visual::component_at(
+        source,
+        source
+            .find("Page() {")
+            .unwrap_or(source.find("const Page()").unwrap() + 6) as u64,
+        "Page",
+    )
+    .unwrap();
+    assert!(definition.is_some());
+    fs::write(project.root.join("lib/detail.dart"), "import 'package:flutter/widgets.dart'; part 'parts/detail_state.dart'; class Detail extends StatefulWidget { const Detail(); State<Detail> createState() => _DetailState(); }").unwrap();
+    fs::write(project.root.join("lib/parts/detail_state.dart"), "part of '../detail.dart'; class _DetailState extends State<Detail> { Widget build(context) => const Text('Detail'); }").unwrap();
+    let tree = server::read_widgets(&projects, &project, "lib/parts/detail_state.dart").unwrap();
+    assert_eq!(tree["nodes"][0]["ownerComponent"]["name"], "Detail");
+}
+
+#[test]
+fn component_scopes_handle_import_cycles_and_refresh_after_file_changes() {
+    let (_home, projects, project) = fixture();
+    fs::write(project.root.join("lib/a.dart"), "export 'b.dart'; class First extends StatelessWidget { Widget build(context) => Text('First'); }").unwrap();
+    fs::write(project.root.join("lib/b.dart"), "export 'a.dart'; class Second extends StatelessWidget { Widget build(context) => Text('Second'); }").unwrap();
+    fs::write(
+        project.root.join("lib/main.dart"),
+        "import 'a.dart'; Widget build() => Column(children: [First(), Second()]);",
+    )
+    .unwrap();
+    let tree = server::read_widgets(&projects, &project, "lib/main.dart").unwrap();
+    assert_eq!(tree["nodes"].as_array().unwrap().len(), 3);
+    fs::write(project.root.join("lib/b.dart"), "export 'a.dart'; class Renamed extends StatelessWidget { Widget build(context) => Text('Second'); }").unwrap();
+    let tree = server::read_widgets(&projects, &project, "lib/main.dart").unwrap();
+    assert_eq!(tree["nodes"].as_array().unwrap().len(), 2);
+}
+
+#[cfg(unix)]
+#[test]
+fn component_imports_never_read_through_symlinks() {
+    let (home, projects, project) = fixture();
+    let outside = home.path().join("outside.dart");
+    fs::write(
+        &outside,
+        "class Outside extends StatelessWidget { Widget build(context) => Text('Private'); }",
+    )
+    .unwrap();
+    std::os::unix::fs::symlink(outside, project.root.join("lib/linked.dart")).unwrap();
+    fs::write(
+        project.root.join("lib/main.dart"),
+        "import 'linked.dart'; Widget build() => Column(children: [Outside()]);",
+    )
+    .unwrap();
+    let tree = server::read_widgets(&projects, &project, "lib/main.dart").unwrap();
+    assert_eq!(tree["nodes"].as_array().unwrap().len(), 1);
+}
+
+#[test]
 fn property_expressions_edit_callbacks_and_nested_values_without_replacing_other_source() {
     let source = "// 😀 keep UTF-16 IDs\r\nWidget build() => Text(title, style: const ui.TextStyle(fontSize: baseSize, color: Colors.red), maxLines: 2 /* keep this note */, semanticsLabel: 'keep');";
     let node = visual::outline(source).unwrap()["nodes"][0].clone();

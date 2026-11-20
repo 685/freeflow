@@ -4,7 +4,6 @@ use crate::{
     flutter::Flutter,
     git, inspector,
     jobs::Jobs,
-    language::Analyzers,
     mcp::{self, required, revision},
     phone_preview,
     projects::{self, Project, Projects},
@@ -51,7 +50,6 @@ struct Workbench {
     browser_wasm: Bytes,
     bin: PathBuf,
     jobs: Arc<Jobs>,
-    analyzers: Analyzers,
     downloads: Mutex<HashMap<String, Download>>,
 }
 
@@ -87,7 +85,6 @@ pub async fn serve(
         browser_wasm,
         bin,
         jobs: jobs.clone(),
-        analyzers: Analyzers::default(),
         downloads: Mutex::new(HashMap::new()),
     });
     let session = home.join("session.json");
@@ -112,7 +109,7 @@ pub async fn serve(
         let mut interval = tokio::time::interval(Duration::from_secs(60));
         loop {
             interval.tick().await;
-            idle_state.analyzers.prune();
+            idle_state.jobs.analyzers.prune();
         }
     });
     let router = Router::new()
@@ -235,7 +232,8 @@ pub fn read_widgets(projects: &Projects, project: &Project, relative: &str) -> R
         return Err(Problem::new(400, "Select a Dart file."));
     }
     let file = projects.file(project, relative)?;
-    let mut outline = visual::outline(&file.content)?;
+    let scope = visual::Scope::for_source(project, relative, &file.content);
+    let mut outline = visual::outline_in(&file.content, &scope)?;
     outline["path"] = json!(file.path);
     outline["revision"] = json!(file.revision);
     Ok(outline)
@@ -248,7 +246,8 @@ pub fn write_widgets(projects: &Projects, project: &Project, input: &Value) -> R
     }
     let file = projects.update(project, relative, revision(input)?, |source| {
         let source = source.ok_or_else(|| Problem::new(404, "Dart file not found."))?;
-        visual::edit(&source.content, &input["command"])
+        let scope = visual::Scope::for_source(project, relative, &source.content);
+        visual::edit_in(&source.content, &input["command"], &scope)
     })?;
     Ok(json!(file))
 }
@@ -265,7 +264,8 @@ pub fn widget_snippet(projects: &Projects, project: &Project, input: &Value) -> 
             "The source changed. Refresh the widget before copying it.",
         ));
     }
-    visual::snippet(&source.content, required(input, "id")?)
+    let scope = visual::Scope::for_source(project, path, &source.content);
+    visual::snippet_in(&source.content, required(input, "id")?, &scope)
 }
 
 pub fn widget_property(projects: &Projects, project: &Project, input: &Value) -> Result<Value> {
@@ -280,10 +280,12 @@ pub fn widget_property(projects: &Projects, project: &Project, input: &Value) ->
             "The source changed. Refresh the widget before reading its property.",
         ));
     }
-    let mut data = visual::property_details(
+    let scope = visual::Scope::for_source(project, path, &source.content);
+    let mut data = visual::property_details_in(
         &source.content,
         required(input, "id")?,
         required(input, "name")?,
+        &scope,
     )?;
     data["revision"] = json!(source.revision);
     Ok(data)
@@ -445,7 +447,8 @@ async fn dispatch(State(state): State<Arc<Workbench>>, request: Request) -> Resu
                     required(&input, "name")?,
                     &input["arguments"],
                     input["scope"].as_str(),
-                )?,
+                )
+                .await?,
             ));
         }
         ("GET", "/api/ai") => {
@@ -599,6 +602,10 @@ async fn project_route(
         let input = body(request).await?;
         let (code, value) = match part {
             "widgets" => (200, write_widgets(projects, &project, &input)?),
+            "component" => (
+                200,
+                crate::components::navigate(jobs, &project, &input).await?,
+            ),
             "widget-snippet" => (200, widget_snippet(projects, &project, &input)?),
             "widget-property" => {
                 let path = required(&input, "path")?;
@@ -613,21 +620,26 @@ async fn project_route(
                     ));
                 }
                 let id = required(&input, "id")?;
+                let scope = visual::Scope::for_source(&project, path, &source.content);
                 let mut result = match input["action"].as_str().unwrap_or("read") {
-                    "read" => {
-                        visual::property_details(&source.content, id, required(&input, "name")?)?
-                    }
+                    "read" => visual::property_details_in(
+                        &source.content,
+                        id,
+                        required(&input, "name")?,
+                        &scope,
+                    )?,
                     "suggest" => {
-                        let (text, offset) = visual::property_completion(&source.content, id)?;
-                        state.analyzers.editor(jobs, &project, &json!({"action":"properties","path":path,"text":text,"offset":offset})).await?
+                        let (text, offset) =
+                            visual::property_completion_in(&source.content, id, &scope)?;
+                        jobs.analyzers.editor(jobs, &project, &json!({"action":"properties","path":path,"text":text,"offset":offset})).await?
                     }
                     "check" => {
-                        let code = visual::edit(
+                        let code = visual::edit_in(
                             &source.content,
                             &json!({"id":id,"operation":"expression","name":input["name"],"expression":input["expression"],"remove":input["remove"]}),
+                            &scope,
                         )?;
-                        state
-                            .analyzers
+                        jobs.analyzers
                             .editor(
                                 jobs,
                                 &project,
@@ -666,7 +678,7 @@ async fn project_route(
                 (200, json!(source))
             }
             "inspect" => (200, inspector::resolve(projects, &project, &input)?),
-            "editor" => (200, state.analyzers.editor(jobs, &project, &input).await?),
+            "editor" => (200, jobs.analyzers.editor(jobs, &project, &input).await?),
             "git" => (202, git::operation(jobs, project, &input)?),
             "agent" => (202, agent::operation(jobs, project, &input)?),
             "preview" => match input["action"].as_str() {
@@ -734,7 +746,7 @@ async fn project_route(
                     return Err(Problem::new(409, "Wait for the project command to finish."));
                 }
                 projects.forget(&project.id)?;
-                state.analyzers.forget(&project.id);
+                jobs.analyzers.forget(&project.id);
                 (200, json!({"removed":true}))
             }
             "download" => {

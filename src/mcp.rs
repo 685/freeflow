@@ -44,7 +44,12 @@ pub fn revision(input: &Value) -> Result<Option<&str>> {
     }
 }
 
-pub fn call(jobs: &Arc<Jobs>, name: &str, args: &Value, scope: Option<&str>) -> Result<Value> {
+pub async fn call(
+    jobs: &Arc<Jobs>,
+    name: &str,
+    args: &Value,
+    scope: Option<&str>,
+) -> Result<Value> {
     if !known(name) {
         return Err(Problem::new(400, "Unknown Freeflow tool."));
     }
@@ -76,6 +81,15 @@ pub fn call(jobs: &Arc<Jobs>, name: &str, args: &Value, scope: Option<&str>) -> 
     })?;
     let project = projects.get(id)?;
     match name {
+        "component_definition" | "component_references" => {
+            let mut input = args.clone();
+            input["action"] = json!(if name == "component_definition" {
+                "definition"
+            } else {
+                "references"
+            });
+            crate::components::navigate(jobs, &project, &input).await
+        }
         "list_files" => Ok(json!(projects.tree(&project)?)),
         "read_project_rules" => crate::project_rules::load(&project, args["path"].as_str()),
         "read_app_logs" => jobs.app_logs(&project, args),

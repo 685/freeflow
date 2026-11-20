@@ -286,6 +286,7 @@ pub struct Jobs {
     pub projects: Arc<Projects>,
     pub flutter: Arc<Flutter>,
     pub origin: Option<String>,
+    pub analyzers: crate::language::Analyzers,
     queue: Mutex<Queue>,
 }
 
@@ -299,6 +300,7 @@ impl Jobs {
             projects,
             flutter,
             origin,
+            analyzers: crate::language::Analyzers::default(),
             queue: Mutex::new(Queue::default()),
         })
     }

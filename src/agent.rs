@@ -426,17 +426,20 @@ impl Workspace<'_> {
                         "Read the widget outline again and use its current revision.",
                     ));
                 }
-                let mut data = visual::property_details(
+                let scope = visual::Scope::for_source(self.project, path, &file.content);
+                let mut data = visual::property_details_in(
                     &file.content,
                     required(&input, "id")?,
                     required(&input, "name")?,
+                    &scope,
                 )?;
                 data["revision"] = json!(file.revision);
                 Ok(data)
             }
             "inspect_widgets" if path.ends_with(".dart") => {
                 let file = self.existing(path)?;
-                let mut outline = visual::outline(&file.content)?;
+                let scope = visual::Scope::for_source(self.project, path, &file.content);
+                let mut outline = visual::outline_in(&file.content, &scope)?;
                 if let Some(nodes) = outline["nodes"].as_array_mut() {
                     nodes.truncate(220);
                 }
@@ -451,7 +454,8 @@ impl Workspace<'_> {
             ),
             "edit_widget" if editing && path.ends_with(".dart") => {
                 let file = self.existing(path)?;
-                let content = visual::edit(&file.content, &input["command"])?;
+                let scope = visual::Scope::for_source(self.project, path, &file.content);
+                let content = visual::edit_in(&file.content, &input["command"], &scope)?;
                 self.stage(path, revision(&input)?, content)
             }
             "replace_text" if editing => {
