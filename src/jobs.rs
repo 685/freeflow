@@ -62,7 +62,7 @@ pub struct Job {
     pub cancel: CancellationToken,
     done: CancellationToken,
     pub reload: Notify,
-    pub restart_device: Notify,
+    pub restart_app: Notify,
 }
 
 impl Job {
@@ -83,7 +83,7 @@ impl Job {
             cancel: CancellationToken::new(),
             done: CancellationToken::new(),
             reload: Notify::new(),
-            restart_device: Notify::new(),
+            restart_app: Notify::new(),
         }
     }
 
@@ -204,6 +204,18 @@ impl Job {
     pub fn refreshing(&self) {
         let mut state = self.state.lock().unwrap();
         state.result["reloading"] = json!(true);
+        state.result["compileError"] = Value::Null;
+    }
+
+    pub fn preview_reload_support(&self, supported: bool) {
+        self.state.lock().unwrap().result["hotReload"] = json!(supported);
+    }
+
+    pub fn hot_reloaded(&self) {
+        let mut state = self.state.lock().unwrap();
+        let count = state.result["reloadCount"].as_u64().unwrap_or_default();
+        state.result["reloadCount"] = json!(count + 1);
+        state.result["reloading"] = json!(false);
         state.result["compileError"] = Value::Null;
     }
 
@@ -737,7 +749,7 @@ impl Jobs {
                 ));
             }
             "reload" => job.reload.notify_one(),
-            "restart" => job.restart_device.notify_one(),
+            "restart" => job.restart_app.notify_one(),
             _ => return Err(Problem::new(400, "Choose a device action.")),
         }
         Ok(job.view(0))
@@ -773,10 +785,22 @@ impl Jobs {
     }
 
     pub fn reload_preview(self: &Arc<Self>, project: Project) -> Result<Value> {
+        self.refresh_preview(project, false)
+    }
+
+    pub fn restart_preview(self: &Arc<Self>, project: Project) -> Result<Value> {
+        self.refresh_preview(project, true)
+    }
+
+    fn refresh_preview(self: &Arc<Self>, project: Project, restart: bool) -> Result<Value> {
         if let Some(job) = self.preview_job(&project.id) {
             let state = job.view(0);
             if state["status"] == "ready" {
-                job.reload.notify_one();
+                if restart {
+                    job.restart_app.notify_one();
+                } else {
+                    job.reload.notify_one();
+                }
                 return Ok(state);
             }
         }
@@ -1395,6 +1419,39 @@ fn new_ipa(root: &Path, previous: &[BuildOutput]) -> Result<PathBuf> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn hot_reload_keeps_the_preview_page_and_recovers_from_errors() {
+        let job = Job::new("preview".into(), Some("app".into()));
+        job.preview_reload_support(true);
+        job.ready("http://127.0.0.1:32100/", 4, true);
+        job.refreshing();
+        job.compile_error("Hot reload was rejected.".into());
+        let failed = job.view(0);
+        assert_eq!(failed["status"], "ready");
+        assert_eq!(failed["result"]["url"], "http://127.0.0.1:32100/");
+        assert_eq!(failed["result"]["epoch"], 4);
+        assert_eq!(failed["result"]["reloading"], false);
+        assert!(failed["result"]["compileError"].is_string());
+        job.refreshing();
+        job.hot_reloaded();
+        job.hot_reloaded();
+        let reloaded = job.view(0);
+        assert_eq!(reloaded["result"]["url"], failed["result"]["url"]);
+        assert_eq!(reloaded["result"]["epoch"], 4);
+        assert_eq!(reloaded["result"]["reloadCount"], 2);
+        assert_eq!(reloaded["result"]["inspector"], true);
+        assert_eq!(reloaded["result"]["hotReload"], true);
+        assert!(reloaded["result"]["compileError"].is_null());
+        assert_eq!(reloaded["result"]["reloading"], false);
+        job.ready("http://127.0.0.1:32100/", 5, true);
+        assert_eq!(job.view(0)["result"]["epoch"], 5);
+        job.restart(6);
+        let restarted = job.view(0);
+        assert!(restarted["result"]["url"].is_null());
+        assert!(restarted["result"]["hotReload"].is_null());
+        assert!(restarted["result"]["reloadCount"].is_null());
+    }
 
     #[test]
     fn app_log_excerpts_keep_the_latest_lines_and_bound_unicode_output() {

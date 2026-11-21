@@ -304,9 +304,15 @@ async fn pick(
         return Ok(());
     };
     let widget = string(&hit["widget"]);
-    let (file, mode) = state::read(|state| (state.file.clone(), state.mode));
+    let (file, mode, stale) = state::read(|state| {
+        (
+            state.file.clone(),
+            state.mode,
+            state.visual["revision"] != hit["revision"],
+        )
+    });
     let next_mode = if widget.is_empty() { Mode::Split } else { mode };
-    if file != path || mode != next_mode {
+    if file != path || mode != next_mode || stale {
         crate::select(path.to_owned(), next_mode).await?;
     }
     let row = state::change(|state| {

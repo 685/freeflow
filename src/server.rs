@@ -698,6 +698,7 @@ async fn project_route(
             "preview" => match input["action"].as_str() {
                 Some("start") => (202, jobs.start_preview(project)?),
                 Some("reload") => (202, jobs.reload_preview(project)?),
+                Some("restart") => (202, jobs.restart_preview(project)?),
                 Some("stop") => (200, jobs.stop_preview(&project.id).await),
                 _ => return Err(Problem::new(400, "Choose a preview action.")),
             },

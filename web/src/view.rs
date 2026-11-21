@@ -608,9 +608,11 @@ pub fn preview(state: &mut State, force: bool) {
     let failed = status == "failed" || job["result"]["compileError"].is_string();
     let reloading = job["result"]["reloading"] == true;
     let supports_inspector = job["result"]["inspector"] == true;
+    let supports_reload = job["result"]["hotReload"] == true;
+    let reload_count = job["result"]["reloadCount"].as_u64().unwrap_or_default();
     let job_id = string(&job["id"]);
     let key = format!(
-        "{}:{job_id}:{status}:{url}:{epoch}:{failed}:{reloading}",
+        "{}:{job_id}:{status}:{url}:{epoch}:{failed}:{reloading}:{supports_reload}:{reload_count}",
         state.project_id()
     );
     if !force && key == state.preview_key {
@@ -623,7 +625,17 @@ pub fn preview(state: &mut State, force: bool) {
         ("play", "Run")
     };
     html("run", format!("{}<span>{action}</span>", icon(symbol, 15)));
-    disabled("reload", !ready || reloading);
+    disabled("reload", !ready || reloading || !supports_reload);
+    disabled("restart-preview", !ready || reloading);
+    attr(
+        &id("reload"),
+        "title",
+        if ready && !supports_reload {
+            "Hot reload requires a Flutter 3.38 or newer debug preview. Use Hot restart with this preview."
+        } else {
+            "Hot reload — preserve app state"
+        },
+    );
     disabled("open-preview", !ready);
     let (class, label) = if failed {
         ("failed", "Build issue")
@@ -651,6 +663,8 @@ pub fn preview(state: &mut State, force: bool) {
             if frame.get_attribute("src").as_deref() != Some(&href) {
                 crate::preview_inspector::reset(state, supports_inspector);
                 attr(&frame, "src", &href);
+            } else if !reloading {
+                crate::preview_inspector::request_tree(state);
             }
         }
     } else {

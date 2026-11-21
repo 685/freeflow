@@ -416,7 +416,7 @@
   },
   {
     "name": "reload_preview",
-    "description": "Refresh the running Flutter preview after source edits.",
+    "description": "Apply source changes to the Flutter preview, preserving app state with hot reload when supported. Older SDKs and compiled previews refresh the page. Use restart_preview to reset the app.",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -432,6 +432,22 @@
       "readOnlyHint": false,
       "openWorldHint": false
     }
+  },
+  {
+    "name": "restart_preview",
+    "description": "Hot restart the Flutter preview with saved source changes, resetting app state. Use after changes to main, initializers, or a rejected hot reload. Starts the preview if stopped.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "type": "string",
+          "description": "Project ID from list_projects. Omit when the MCP connection is scoped to one project."
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    },
+    "annotations": {"readOnlyHint": false, "openWorldHint": false}
   },
   {
     "name": "analyze",

@@ -114,6 +114,7 @@ pub async fn call(
         "start_preview" => jobs.start_preview(project),
         "preview_status" => Ok(json!({"preview":jobs.preview(&project.id)})),
         "reload_preview" => jobs.reload_preview(project),
+        "restart_preview" => jobs.restart_preview(project),
         "analyze" | "test" => jobs.analyze(project, name),
         "build" => jobs.build(project, required(args, "target")?, args),
         "list_exports" => Ok(json!({"exports":jobs.artifacts(&project)?})),

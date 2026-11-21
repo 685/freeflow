@@ -3,6 +3,112 @@ use serde_json::{Value, json};
 use std::{fs, path::Path, sync::Arc, time::Duration};
 use tokio_util::sync::CancellationToken;
 
+#[test]
+fn preview_hot_reload_requires_a_known_compatible_flutter_sdk() {
+    let home = tempfile::tempdir().unwrap();
+    let bin = home.path().join("flutter/bin");
+    fs::create_dir_all(bin.join("cache")).unwrap();
+    let launcher = if cfg!(windows) {
+        "flutter.bat"
+    } else {
+        "flutter"
+    };
+    let mut sdk = flutter::Sdk {
+        file: bin.join(launcher),
+        version: None,
+        mode: "external",
+    };
+    assert!(!sdk.web_hot_reload());
+    let version = bin.join("cache/flutter.version.json");
+    fs::write(&version, r#"{"frameworkVersion":"3.35.7"}"#).unwrap();
+    assert!(!sdk.web_hot_reload());
+    fs::write(&version, r#"{"frameworkVersion":"3.38.0"}"#).unwrap();
+    assert!(sdk.web_hot_reload());
+    fs::write(&version, r#"{"flutterVersion":"3.41.0-0.1.pre"}"#).unwrap();
+    assert!(sdk.web_hot_reload());
+    fs::write(&version, "malformed").unwrap();
+    assert!(!sdk.web_hot_reload());
+    sdk.version = Some("4.0.0".into());
+    assert!(sdk.web_hot_reload());
+    sdk.version = Some("3.37.0".into());
+    assert!(!sdk.web_hot_reload());
+}
+
+#[test]
+fn rapid_saves_and_deleted_libraries_keep_reload_state_and_source_consistent() {
+    let (_home, projects, project) = fixture();
+    let main = project.root.join("lib/main.dart");
+    let previous = preview::stamps(&project.root).unwrap();
+    let content = "import 'deleted.dart';\nvoid main() { print('rapid edit'); }\n";
+    fs::write(&main, content).unwrap();
+    let old = std::time::SystemTime::UNIX_EPOCH + Duration::from_secs(10);
+    fs::OpenOptions::new()
+        .write(true)
+        .open(&main)
+        .unwrap()
+        .set_modified(old)
+        .unwrap();
+    let minimum = std::time::SystemTime::now()
+        .duration_since(std::time::SystemTime::UNIX_EPOCH)
+        .unwrap()
+        .as_secs()
+        + 1;
+    let next = preview::stamps(&project.root).unwrap();
+    let prepared = preview::prepare_hot_reload(&project, &previous, next).unwrap();
+    assert_eq!(fs::read_to_string(&main).unwrap(), content);
+    assert!(
+        fs::metadata(&main)
+            .unwrap()
+            .modified()
+            .unwrap()
+            .duration_since(std::time::SystemTime::UNIX_EPOCH)
+            .unwrap()
+            .as_secs()
+            >= minimum
+    );
+    let unchanged =
+        preview::prepare_hot_reload(&project, &prepared, preview::stamps(&project.root).unwrap())
+            .unwrap();
+    assert!(unchanged == prepared);
+    let library = project.root.join("lib/deleted.dart");
+    fs::write(&library, "const value = 1;\n").unwrap();
+    fs::OpenOptions::new()
+        .write(true)
+        .open(&main)
+        .unwrap()
+        .set_modified(old)
+        .unwrap();
+    let previous = preview::stamps(&project.root).unwrap();
+    fs::remove_file(&library).unwrap();
+    let removed = preview::stamps(&project.root).unwrap();
+    let mut missing = std::collections::HashSet::new();
+    assert!(preview::missing_dart_sources(
+        &previous,
+        &removed,
+        &mut missing
+    ));
+    assert!(preview::missing_dart_sources(
+        &removed,
+        &removed,
+        &mut missing
+    ));
+    fs::write(&library, "const value = 2;\n").unwrap();
+    let restored = preview::stamps(&project.root).unwrap();
+    assert!(!preview::missing_dart_sources(
+        &removed,
+        &restored,
+        &mut missing
+    ));
+    assert!(missing.is_empty());
+    preview::prepare_hot_reload(&project, &removed, restored).unwrap();
+    assert_eq!(
+        projects.file(&project, "lib/main.dart").unwrap().content,
+        content
+    );
+    assert_eq!(projects.edit_history(&project)["undoCount"], 0);
+    assert_eq!(fs::read_to_string(library).unwrap(), "const value = 2;\n");
+}
+
 fn fixture() -> (tempfile::TempDir, projects::Projects, projects::Project) {
     let home = tempfile::tempdir().unwrap();
     let root = home.path().join("app");

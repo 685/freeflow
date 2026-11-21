@@ -57,6 +57,35 @@ pub struct Sdk {
     pub mode: &'static str,
 }
 
+impl Sdk {
+    pub fn web_hot_reload(&self) -> bool {
+        let version = self.version.clone().or_else(|| {
+            if !standard(&self.file) {
+                return None;
+            }
+            let info: Value =
+                files::read_json(&self.file.parent()?.join("cache/flutter.version.json"))
+                    .ok()??;
+            info["frameworkVersion"]
+                .as_str()
+                .or(info["flutterVersion"].as_str())
+                .map(str::to_owned)
+        });
+        let Some(version) = version else {
+            return false;
+        };
+        let mut parts = version.split('.');
+        let Some((major, minor)) = parts
+            .next()
+            .and_then(|value| value.parse::<u32>().ok())
+            .zip(parts.next().and_then(|value| value.parse::<u32>().ok()))
+        else {
+            return false;
+        };
+        (major, minor) >= (3, 38)
+    }
+}
+
 #[derive(Clone)]
 pub struct Release {
     pub version: String,

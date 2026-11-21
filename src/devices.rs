@@ -312,7 +312,7 @@ async fn run_session(
                 }
                 break Err(Problem::new(504,"Flutter did not start on the device in seven minutes."));
             }
-            _ = job.restart_device.notified(), if idle => true,
+            _ = job.restart_app.notified(), if idle => true,
             _ = job.reload.notified(), if idle => false,
             _ = watch.tick(), if idle && capabilities["hotReload"] == true => {
                 if jobs.busy(&project.id) { continue; }

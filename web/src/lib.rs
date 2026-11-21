@@ -684,6 +684,7 @@ fn register_events() {
         ui::spawn(preview_action(action));
     });
     ui::click("reload", || ui::spawn(preview_action("reload")));
+    ui::click("restart-preview", || ui::spawn(preview_action("restart")));
     ui::click("phone-preview", || ui::spawn(phone_preview::open()));
     ui::click("open-preview", || {
         let url = state::read(|state| string(&state.preview["result"]["url"]).to_owned());

@@ -18,12 +18,13 @@ use axum::{
 use regex::Regex;
 use serde_json::{Value, json};
 use std::{
+    collections::{HashMap, HashSet},
     ffi::OsString,
     fs,
     net::Ipv4Addr,
     path::{Component, Path, PathBuf},
     sync::{Arc, LazyLock, RwLock},
-    time::{Duration, SystemTime},
+    time::{Duration, SystemTime, UNIX_EPOCH},
 };
 use tokio::{
     net::TcpListener,
@@ -39,6 +40,24 @@ static WORKER: LazyLock<Regex> = LazyLock::new(|| {
 });
 static RESTART_REQUIRED: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"(?i)not supported|not available|no connected").unwrap());
+
+fn refresh_error(message: &Value) -> Option<String> {
+    if message["error"].is_null()
+        && !message["result"]["code"]
+            .as_i64()
+            .is_some_and(|code| code != 0)
+    {
+        return None;
+    }
+    Some(
+        message["error"]
+            .as_str()
+            .or(message["error"]["message"].as_str())
+            .or(message["result"]["message"].as_str())
+            .unwrap_or("Flutter could not apply this change.")
+            .to_owned(),
+    )
+}
 
 pub async fn run(jobs: &Jobs, job: &Job, project: &Project) -> Result<()> {
     let sdk = jobs.flutter.require()?;
@@ -76,7 +95,7 @@ pub async fn run(jobs: &Jobs, job: &Job, project: &Project) -> Result<()> {
     }
 }
 
-#[derive(PartialEq)]
+#[derive(Clone, PartialEq)]
 pub(crate) struct Stamps {
     pub(crate) code: Vec<(String, Option<(SystemTime, u64)>)>,
     pub(crate) project: Vec<(String, Option<(SystemTime, u64)>)>,
@@ -111,6 +130,58 @@ pub(crate) fn stamps(root: &Path) -> Result<Stamps> {
         project.push(stamp(root, name.into()));
     }
     Ok(Stamps { code, project })
+}
+
+pub(crate) fn missing_dart_sources(
+    previous: &Stamps,
+    next: &Stamps,
+    missing: &mut HashSet<String>,
+) -> bool {
+    let present: HashSet<_> = next.code.iter().map(|(path, _)| path).collect();
+    missing.extend(
+        previous
+            .code
+            .iter()
+            .filter(|(path, _)| path.ends_with(".dart") && !present.contains(path))
+            .map(|(path, _)| path.clone()),
+    );
+    missing.retain(|path| !present.contains(path));
+    !missing.is_empty()
+}
+
+pub(crate) fn prepare_hot_reload(
+    project: &Project,
+    previous: &Stamps,
+    next: Stamps,
+) -> Result<Stamps> {
+    let before: HashMap<_, _> = previous
+        .code
+        .iter()
+        .map(|(path, stamp)| (path, stamp))
+        .collect();
+    // Dart's file stat can truncate subsecond precision, while Flutter records a
+    // fractional compilation time. Rapid atomic saves must still invalidate the
+    // compiler.
+    let modified = UNIX_EPOCH
+        + Duration::from_secs(
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .map_err(Problem::internal)?
+                .as_secs()
+                + 1,
+        );
+    for (path, stamp) in &next.code {
+        if !path.ends_with(".dart") || before.get(path).copied() == Some(stamp) {
+            continue;
+        }
+        let path = files::project_file(&project.root, path, false)?;
+        let file = fs::OpenOptions::new().write(true).open(path)?;
+        if file.metadata()?.modified()? < modified {
+            file.set_modified(modified)?;
+        }
+    }
+    // Do not mistake our own timestamp updates for another source edit.
+    stamps(&project.root)
 }
 
 enum DebugEnd {
@@ -163,6 +234,7 @@ async fn debug(
         &url,
         epoch,
         target.is_some(),
+        sdk.web_hot_reload(),
     )
     .await;
     process.stop().await;
@@ -184,19 +256,23 @@ async fn debug_session(
     url: &str,
     mut epoch: u64,
     inspector: bool,
+    hot_reload: bool,
 ) -> Result<DebugEnd> {
     let mut last = stamps(&project.root)?;
+    let mut applied = last.clone();
     let mut watch = watch();
     let start_deadline = Instant::now() + Duration::from_secs(90);
     let mut app_id: Option<String> = None;
     let mut ready = false;
     let mut request_id = 0;
-    let mut pending: Option<(u64, Instant)> = None;
+    let mut pending: Option<(u64, Instant, bool)> = None;
     let mut startup_error = None;
+    let mut missing_sources = HashSet::new();
+    job.preview_reload_support(hot_reload);
 
     loop {
-        let deadline = pending.map_or(start_deadline, |(_, deadline)| deadline);
-        let reload = tokio::select! {
+        let deadline = pending.map_or(start_deadline, |(_, deadline, _)| deadline);
+        let full_restart = tokio::select! {
             _ = job.cancel.cancelled() => return Ok(DebugEnd::Stopped),
             status = process.child.wait() => {
                 let status = status?;
@@ -230,21 +306,23 @@ async fn debug_session(
                                     job.log("Preview ready.");
                                     ready = true;
                                 }
-                                if pending.is_some_and(|(id, _)| message["id"].as_u64() == Some(id)) {
-                                    pending = None;
-                                    if !message["error"].is_null() {
-                                        job.log("Flutter could not refresh the page. Restarting Flutter.");
-                                        return Ok(DebugEnd::Restart(epoch + 1));
-                                    }
-                                    let result = &message["result"];
-                                    if result["code"].as_i64().is_some_and(|code| code != 0) {
-                                        let error = result["message"].as_str().unwrap_or("Flutter could not compile this change.");
-                                        if RESTART_REQUIRED.is_match(error) {
+                                if pending.is_some_and(|(id, _, _)| message["id"].as_u64() == Some(id)) {
+                                    let (_, _, reloading) = pending.take().unwrap();
+                                    if let Some(error) = refresh_error(&message) {
+                                        if reloading {
+                                            job.compile_error(format!("{error} Fix the code and reload, or use Hot restart to reset the app."));
+                                        } else if !message["error"].is_null() || RESTART_REQUIRED.is_match(&error) {
                                             job.log(format!("{error} Restarting Flutter."));
                                             return Ok(DebugEnd::Restart(epoch + 1));
+                                        } else {
+                                            job.compile_error(error);
                                         }
-                                        job.compile_error(error.into());
+                                    } else if reloading {
+                                        applied = last.clone();
+                                        job.hot_reloaded();
+                                        job.log("Hot reload complete. App state preserved.");
                                     } else {
+                                        applied = last.clone();
                                         epoch += 1;
                                         job.ready(url, epoch, inspector);
                                         job.log("Preview updated.");
@@ -255,16 +333,22 @@ async fn debug_session(
                         Err(_) => job.log(line),
                     }
                 }
-                false
+                continue;
             }
             _ = time::sleep_until(deadline), if !ready || pending.is_some() => {
                 if ready {
+                    if pending.is_some_and(|(_, _, reloading)| reloading) {
+                        pending = None;
+                        job.compile_error("Hot reload timed out. The running app was kept. Try Hot restart to reset it.".into());
+                        continue;
+                    }
                     job.log("Flutter restart timed out. Restarting Flutter.");
                     return Ok(DebugEnd::Restart(epoch + 1));
                 }
                 return Err(Problem::new(422, "Flutter did not start a preview within 90 seconds. See the console."));
             }
-            _ = job.reload.notified(), if ready && pending.is_none() => true,
+            _ = job.restart_app.notified(), if ready && pending.is_none() => true,
+            _ = job.reload.notified(), if ready && pending.is_none() => !hot_reload,
             _ = watch.tick(), if ready && pending.is_none() => {
                 if jobs.busy(&project.id) { continue; }
                 let next = stamps(&project.root)?;
@@ -273,24 +357,66 @@ async fn debug_session(
                     return Ok(DebugEnd::Restart(epoch + 1));
                 }
                 let changed = next.code != last.code;
-                last = next;
-                changed
+                if !changed { continue; }
+                !hot_reload
             }
         };
-        if reload {
+        {
             let Some(app_id) = &app_id else {
                 job.log("Dart source changed. Restarting Flutter.");
                 return Ok(DebugEnd::Restart(epoch + 1));
             };
+            let next = stamps(&project.root)?;
+            if next.project != last.project {
+                job.log("Project files changed. Restarting Flutter.");
+                return Ok(DebugEnd::Restart(epoch + 1));
+            }
+            // The incremental compiler can retain a deleted library. Keep the
+            // running app until the user restarts or restores the missing files.
+            if missing_dart_sources(&last, &next, &mut missing_sources) {
+                last = next;
+                if full_restart {
+                    job.log("Dart files were removed. Restarting Flutter to rebuild the preview.");
+                    return Ok(DebugEnd::Restart(epoch + 1));
+                }
+                job.compile_error("A Dart file was removed. Use Hot restart to rebuild the preview, or restore the file to continue Hot reload. The running app was kept.".into());
+                continue;
+            }
+            match prepare_hot_reload(project, &applied, next) {
+                Ok(next) => last = next,
+                Err(error) if full_restart => {
+                    job.log(format!(
+                        "{} Restarting Flutter to read the changed source.",
+                        error.message
+                    ));
+                    return Ok(DebugEnd::Restart(epoch + 1));
+                }
+                Err(error) => {
+                    last = stamps(&project.root)?;
+                    job.compile_error(format!(
+                        "{} Use Hot restart to apply this change.",
+                        error.message
+                    ));
+                    continue;
+                }
+            }
             request_id += 1;
             job.refreshing();
-            job.log("Refreshing the preview.");
+            job.log(if full_restart {
+                "Hot restarting the preview."
+            } else {
+                "Hot reloading the preview."
+            });
             let command = json!([{"id":request_id,"method":"app.restart","params":{
-                "appId":app_id,"fullRestart":true,"pause":false}}]);
+                "appId":app_id,"fullRestart":full_restart,"pause":false}}]);
             if process.write(&format!("{command}\n")).await.is_err() {
                 return Ok(DebugEnd::Restart(epoch + 1));
             }
-            pending = Some((request_id, Instant::now() + Duration::from_secs(25)));
+            pending = Some((
+                request_id,
+                Instant::now() + Duration::from_secs(65),
+                !full_restart,
+            ));
         }
     }
 }
@@ -343,6 +469,7 @@ async fn compiled(
     sdk: &Sdk,
     mut epoch: u64,
 ) -> Result<()> {
+    job.preview_reload_support(false);
     let parent = jobs.projects.home.join("tmp");
     fs::create_dir_all(&parent)?;
     let folder = tempfile::Builder::new()
@@ -359,6 +486,7 @@ async fn compiled(
         let manual = tokio::select! {
             _ = job.cancel.cancelled() => break,
             _ = job.reload.notified() => true,
+            _ = job.restart_app.notified() => true,
             _ = watch.tick() => false,
         };
         if jobs.busy(&project.id) {
