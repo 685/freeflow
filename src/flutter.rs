@@ -154,7 +154,11 @@ impl Flutter {
     }
 
     pub fn selected(&self) -> Result<Option<Sdk>> {
-        let settings = self.settings()?;
+        Self::selected_at(&self.home)
+    }
+
+    pub fn selected_at(home: &Path) -> Result<Option<Sdk>> {
+        let settings: Settings = files::read_json(&home.join("settings.json"))?.unwrap_or_default();
         let explicit = env::var_os("FREEFLOW_FLUTTER")
             .filter(|value| !value.is_empty())
             .unwrap_or_else(|| settings.flutter_path.into());
@@ -165,7 +169,7 @@ impl Flutter {
                 mode: "external",
             }));
         }
-        let sdk_home = self.home.join("sdk");
+        let sdk_home = home.join("sdk");
         let active: Value = files::read_json(&sdk_home.join("active.json"))?.unwrap_or_default();
         if let Some(version) = active["version"]
             .as_str()

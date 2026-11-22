@@ -21,6 +21,7 @@ mod theme;
 mod view;
 mod web_publish;
 mod widget_clipboard;
+mod widget_library;
 
 use crate::{
     dom::{
@@ -1062,6 +1063,7 @@ fn inspector_events() {
                 });
             }
             Some("wrap") => dialogs::wrap(node),
+            Some("library") => ui::spawn(widget_library::open()),
             Some("remove") => ui::spawn(visual_edit(json!({"id":node["id"],"operation":"remove"}))),
             Some("add") => ui::spawn(visual_edit(json!({"id":node["id"],"operation":"add",
                 "slot":ui::value(&id("insert-slot")),"widget":ui::value(&id("insert-widget"))}))),

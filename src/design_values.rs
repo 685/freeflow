@@ -239,7 +239,7 @@ pub fn bind(projects: &Projects, project: &Project, input: &Value) -> Result<Val
         let (text,expression,shift) = if path==value_path {(source.content.clone(),required(&value,"name")?.into(),0)} else {visual::design_import(&source.content,&uris(project,path,value_path),required(&value,"name")?)?};
         let old = required(input,"id")?.parse::<u64>().map_err(|_| Problem::new(400,"Choose a source widget."))?;
         selected=old.checked_add(shift as u64).ok_or_else(|| Problem::new(400,"Choose a source widget."))?.to_string();
-        let scope = visual::Scope::for_source(project,path,&text);
+        let scope = visual::Scope::for_source(projects, project,path,&text);
         visual::design_binding(&text,&json!({"id":selected,"operation":"expression","name":required(input,"name")?,"expression":expression}),&scope)
     })?;
     Ok(json!({"source":source,"widget":selected}))

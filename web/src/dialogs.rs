@@ -111,6 +111,16 @@ pub(crate) enum View {
     WidgetProperty {
         context: crate::property_panel::Context,
     },
+    WidgetLibrary {
+        context: crate::property_panel::Context,
+        catalog: Value,
+    },
+    WidgetConstructor {
+        context: crate::property_panel::Context,
+        catalog: Value,
+        config: Value,
+        slot: String,
+    },
     AssetPicker {
         context: crate::property_panel::Context,
         name: String,
@@ -1087,6 +1097,12 @@ pub(crate) fn form_data(form: &Element) -> Value {
 
 async fn submit_view(view: View, version: u64, mut input: Value) -> Result {
     match view {
+        View::WidgetConstructor {
+            context,
+            config,
+            slot,
+            ..
+        } => crate::widget_library::save(&context, &config, &slot, version).await?,
         View::DesignValue {
             project,
             generation,
@@ -1187,6 +1203,18 @@ async fn submit_view(view: View, version: u64, mut input: Value) -> Result {
 
 async fn act(view: View, version: u64, action: &str, element: &Element) -> Result {
     match view {
+        View::WidgetLibrary { context, catalog } => {
+            crate::widget_library::act(&context, &catalog, version, action, element).await?
+        }
+        View::WidgetConstructor {
+            context,
+            catalog,
+            config,
+            slot,
+        } => {
+            crate::widget_library::value_action(&context, &catalog, &config, &slot, version, action)
+                .await?
+        }
         View::DesignValues {
             project,
             generation,
@@ -1388,6 +1416,7 @@ async fn act(view: View, version: u64, action: &str, element: &Element) -> Resul
 }
 
 pub fn initialize() {
+    crate::widget_library::initialize();
     dom::click("modal-close", close);
     dom::listen(&id("modal"), "click", |event| {
         if let Some(target) = dom::target(&event).filter(|target| target.id() == "modal") {

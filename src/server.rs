@@ -232,7 +232,7 @@ pub fn read_widgets(projects: &Projects, project: &Project, relative: &str) -> R
         return Err(Problem::new(400, "Select a Dart file."));
     }
     let file = projects.file(project, relative)?;
-    let scope = visual::Scope::for_source(project, relative, &file.content);
+    let scope = visual::Scope::for_source(projects, project, relative, &file.content);
     let mut outline = visual::outline_in(&file.content, &scope)?;
     outline["path"] = json!(file.path);
     outline["revision"] = json!(file.revision);
@@ -246,7 +246,7 @@ pub fn write_widgets(projects: &Projects, project: &Project, input: &Value) -> R
     }
     let file = projects.update(project, relative, revision(input)?, |source| {
         let source = source.ok_or_else(|| Problem::new(404, "Dart file not found."))?;
-        let scope = visual::Scope::for_source(project, relative, &source.content);
+        let scope = visual::Scope::for_source(projects, project, relative, &source.content);
         visual::edit_in(&source.content, &input["command"], &scope)
     })?;
     Ok(json!(file))
@@ -264,7 +264,7 @@ pub fn widget_snippet(projects: &Projects, project: &Project, input: &Value) -> 
             "The source changed. Refresh the widget before copying it.",
         ));
     }
-    let scope = visual::Scope::for_source(project, path, &source.content);
+    let scope = visual::Scope::for_source(projects, project, path, &source.content);
     visual::snippet_in(&source.content, required(input, "id")?, &scope)
 }
 
@@ -280,7 +280,7 @@ pub fn widget_property(projects: &Projects, project: &Project, input: &Value) ->
             "The source changed. Refresh the widget before reading its property.",
         ));
     }
-    let scope = visual::Scope::for_source(project, path, &source.content);
+    let scope = visual::Scope::for_source(projects, project, path, &source.content);
     let mut data = visual::property_details_in(
         &source.content,
         required(input, "id")?,
@@ -548,6 +548,11 @@ async fn project_route(
                 &project,
                 &json!({"path":file,"kind":query(url,"kind"),"query":query(url,"query"),"since":query(url,"since")}),
             )?,
+            "widget-library" => crate::widget_library::list(
+                projects,
+                &project,
+                &json!({"path":file,"query":query(url,"query"),"category":query(url,"category"),"refresh":query(url,"refresh")=="true"}),
+            )?,
             "theme-value" => design_values::read(
                 projects,
                 &project,
@@ -631,7 +636,7 @@ async fn project_route(
                     ));
                 }
                 let id = required(&input, "id")?;
-                let scope = visual::Scope::for_source(&project, path, &source.content);
+                let scope = visual::Scope::for_source(projects, &project, path, &source.content);
                 let mut result = match input["action"].as_str().unwrap_or("read") {
                     "read" => visual::property_details_in(
                         &source.content,
@@ -691,6 +696,22 @@ async fn project_route(
             "theme-values" => (200, design_values::write(projects, &project, &input)?),
             "theme-value-check" => (200, design_values::check(jobs, &project, &input).await?),
             "theme-binding" => (200, design_values::bind(projects, &project, &input)?),
+            "widget-library-targets" => (
+                200,
+                crate::widget_library::targets(jobs, &project, &input).await?,
+            ),
+            "widget-library-options" => (
+                200,
+                crate::widget_library::configure(jobs, &project, &input).await?,
+            ),
+            "widget-library-check" => (
+                200,
+                crate::widget_library::insert(jobs, &project, &input, false).await?,
+            ),
+            "widget-library-insert" => (
+                200,
+                crate::widget_library::insert(jobs, &project, &input, true).await?,
+            ),
             "inspect" => (200, inspector::resolve(projects, &project, &input)?),
             "editor" => (200, jobs.analyzers.editor(jobs, &project, &input).await?),
             "git" => (202, git::operation(jobs, project, &input)?),

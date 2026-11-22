@@ -506,6 +506,9 @@ pub fn inspector(state: &State) {
         let widgets = widget_options(node, string(first));
         content.push_str(&format!(r#"<div class="inspect-group"><h3>Add widget</h3><select id="insert-slot" aria-label="Child slot">{options}</select><div class="add-row"><select id="insert-widget" aria-label="Widget to add">{widgets}</select><button type="button" data-widget-action="add" class="button outline small">{}Add</button></div></div>"#, icon("plus", 16)));
     }
+    if node["libraryChildren"] == true {
+        content.push_str(&format!(r#"<div class="inspect-group"><button type="button" class="button outline" data-widget-action="library">{}Browse widget library</button></div>"#,icon("plus",16)));
+    }
     html(
         "inspector",
         format!("{}{content}", crate::component_panel::navigation(state)),

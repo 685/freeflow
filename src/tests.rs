@@ -109,6 +109,64 @@ fn rapid_saves_and_deleted_libraries_keep_reload_state_and_source_consistent() {
     assert_eq!(fs::read_to_string(library).unwrap(), "const value = 2;\n");
 }
 
+#[test]
+fn widget_library_reads_resolved_dependencies_and_limits_private_constructors_to_their_file() {
+    let (_home, projects, project) = fixture();
+    fs::create_dir_all(project.root.join(".dart_tool")).unwrap();
+    let dependency = project.root.join("vendor/badges");
+    fs::create_dir_all(dependency.join("lib/src")).unwrap();
+    fs::write(
+        dependency.join("lib/badges.dart"),
+        "export 'src/tag.dart' show DependencyTag;",
+    )
+    .unwrap();
+    fs::write(dependency.join("lib/src/tag.dart"), "class DependencyTag extends StatelessWidget { DependencyTag.named(); } class HiddenTag extends Widget {}").unwrap();
+    let directory = reqwest::Url::from_directory_path(&dependency)
+        .unwrap()
+        .to_string();
+    fs::write(project.root.join(".dart_tool/package_config.json"), serde_json::to_string(&json!({"packages":[{"name":"badges","rootUri":directory.trim_end_matches('/'),"packageUri":"lib/"}]})).unwrap()).unwrap();
+    fs::write(project.root.join("lib/local #.dart"), "class Badge extends StatelessWidget { Badge.named(); Badge._(); } class _PrivateBadge extends Widget {} abstract class State<T extends StatefulWidget> {} class LocalState extends State<Badge> {}").unwrap();
+    let catalog =
+        widget_library::list(&projects, &project, &json!({"path":"lib/main.dart"})).unwrap();
+    let entries = catalog["entries"].as_array().unwrap();
+    assert!(
+        entries
+            .iter()
+            .any(|entry| entry["name"] == "DependencyTag.named"
+                && entry["category"] == "Dependencies")
+    );
+    assert!(
+        entries
+            .iter()
+            .any(|entry| entry["name"] == "Badge.named" && entry["category"] == "Project")
+    );
+    assert!(!entries.iter().any(|entry| matches!(
+        entry["name"].as_str(),
+        Some("HiddenTag" | "Badge._" | "_PrivateBadge" | "LocalState" | "State")
+    )));
+    let local = widget_library::list(
+        &projects,
+        &project,
+        &json!({"path":"lib/local #.dart","category":"Project"}),
+    )
+    .unwrap();
+    assert!(
+        local["entries"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|entry| entry["name"] == "Badge._")
+    );
+    assert!(
+        local["entries"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|entry| entry["name"] == "_PrivateBadge")
+    );
+    assert!(widget_library::list(&projects, &project, &json!({"path":"../outside.dart"})).is_err());
+}
+
 fn fixture() -> (tempfile::TempDir, projects::Projects, projects::Project) {
     let home = tempfile::tempdir().unwrap();
     let root = home.path().join("app");

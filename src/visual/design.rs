@@ -644,6 +644,15 @@ pub(crate) fn design_import(
     uris: &[String],
     name: &str,
 ) -> Result<(String, String, usize)> {
+    import_reference(source, uris, name, "freeflowTheme")
+}
+
+pub(crate) fn import_reference(
+    source: &str,
+    uris: &[String],
+    name: &str,
+    base: &str,
+) -> Result<(String, String, usize)> {
     let tokens = tokenize(source)?;
     if tokens
         .windows(2)
@@ -688,10 +697,10 @@ pub(crate) fn design_import(
             0,
         ));
     }
-    let mut prefix = "freeflowTheme".to_owned();
+    let mut prefix = base.to_owned();
     let mut suffix = 2;
     while tokens.iter().any(|token| token.text == prefix) {
-        prefix = format!("freeflowTheme{suffix}");
+        prefix = format!("{base}{suffix}");
         suffix += 1;
     }
     let eol = if source.contains("\r\n") {

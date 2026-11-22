@@ -377,6 +377,147 @@
     }
   },
   {
+    "name": "list_widget_catalog",
+    "description": "Find saved Flutter framework, project and dependency widget constructors. Search by widget or package name; private constructors are offered only in their own Dart file.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "type": "string",
+          "description": "Project ID from list_projects. Omit when the MCP connection is scoped to one project."
+        },
+        "path": {
+          "type": "string",
+          "description": "Dart file to edit, for example lib/main.dart."
+        },
+        "query": {
+          "type": "string"
+        },
+        "category": {
+          "enum": [
+            "Framework",
+            "Project",
+            "Dependencies"
+          ]
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 200
+        }
+      },
+      "required": [
+        "path"
+      ],
+      "additionalProperties": false
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": false
+    }
+  },
+  {
+    "name": "widget_insert_options",
+    "description": "Read resolved constructor parameters, suggested values and available child slots. Call before insert_widget. Does not save source.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "type": "string",
+          "description": "Project ID from list_projects. Omit when the MCP connection is scoped to one project."
+        },
+        "path": {
+          "type": "string",
+          "description": "Dart file to edit, for example lib/main.dart."
+        },
+        "revision": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string",
+          "description": "Parent widget ID from inspect_widgets."
+        },
+        "entryId": {
+          "type": "string",
+          "description": "Widget constructor ID from list_widget_catalog."
+        },
+        "entryRevision": {
+          "type": "string",
+          "description": "Constructor source revision from list_widget_catalog."
+        }
+      },
+      "required": [
+        "path",
+        "revision",
+        "id",
+        "entryId",
+        "entryRevision"
+      ],
+      "additionalProperties": false
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": false
+    }
+  },
+  {
+    "name": "insert_widget",
+    "description": "Insert a configured widget in an available child slot. Dart checks the proposed saved code before writing. Imports and insertion form one Undo edit. Read widget_insert_options first.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "type": "string",
+          "description": "Project ID from list_projects. Omit when the MCP connection is scoped to one project."
+        },
+        "path": {
+          "type": "string",
+          "description": "Dart file to edit, for example lib/main.dart."
+        },
+        "revision": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string",
+          "description": "Parent widget ID from inspect_widgets."
+        },
+        "entryId": {
+          "type": "string",
+          "description": "Widget constructor ID from list_widget_catalog."
+        },
+        "entryRevision": {
+          "type": "string",
+          "description": "Constructor source revision from list_widget_catalog."
+        },
+        "slot": {
+          "type": "string"
+        },
+        "signatureRevision": {
+          "type": "string",
+          "description": "Parameter revision from widget_insert_options."
+        },
+        "arguments": {
+          "type": "object",
+          "description": "Parameter names mapped to {mode,value}. Modes: omit, string, bool, number, dart, default (suggested value), empty (placeholder widget). Omitted entries use the suggested required values or constructor defaults."
+        }
+      },
+      "required": [
+        "path",
+        "revision",
+        "id",
+        "entryId",
+        "entryRevision",
+        "slot",
+        "signatureRevision"
+      ],
+      "additionalProperties": false
+    },
+    "annotations": {
+      "readOnlyHint": false,
+      "openWorldHint": false
+    }
+  },
+  {
     "name": "start_preview",
     "description": "Start the real local Flutter web preview and return its job. Check preview_status for the preview URL.",
     "inputSchema": {

@@ -18,8 +18,13 @@ fn unchanged(jobs: &Jobs, project: &Project, file: &Source) -> Result<()> {
     Ok(())
 }
 
-fn enrich(project: &Project, file: &Source, mut definition: Value) -> Result<Value> {
-    let scope = visual::Scope::for_source(project, &file.path, &file.content);
+fn enrich(
+    projects: &crate::projects::Projects,
+    project: &Project,
+    file: &Source,
+    mut definition: Value,
+) -> Result<Value> {
+    let scope = visual::Scope::for_source(projects, project, &file.path, &file.content);
     let outline = visual::outline_in(&file.content, &scope)?;
     definition["widget"] = outline["components"]
         .as_array()
@@ -51,7 +56,7 @@ pub async fn navigate(jobs: &Jobs, project: &Project, input: &Value) -> Result<V
             "Choose component definition or references.",
         ));
     }
-    let scope = visual::Scope::for_source(project, path, &source.content);
+    let scope = visual::Scope::for_source(&jobs.projects, project, path, &source.content);
     let outline = visual::outline_in(&source.content, &scope)?;
     let id = required(input, "id")?;
     let node = outline["nodes"]
@@ -91,7 +96,7 @@ pub async fn navigate(jobs: &Jobs, project: &Project, input: &Value) -> Result<V
             location["offset"].as_u64().unwrap_or_default(),
             name,
         )? {
-            definition = Some((enrich(project, &file, component)?, file));
+            definition = Some((enrich(&jobs.projects, project, &file, component)?, file));
             break;
         }
     }
@@ -136,7 +141,7 @@ pub async fn navigate(jobs: &Jobs, project: &Project, input: &Value) -> Result<V
                 continue;
             }
             source_bytes += file.content.len();
-            let scope = visual::Scope::for_source(project, path, &file.content);
+            let scope = visual::Scope::for_source(&jobs.projects, project, path, &file.content);
             let outline = visual::outline_in(&file.content, &scope)?;
             files.insert(path.into(), (file, outline));
         }

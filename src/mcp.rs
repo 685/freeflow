@@ -114,6 +114,13 @@ pub async fn call(
         "start_preview" => jobs.start_preview(project),
         "preview_status" => Ok(json!({"preview":jobs.preview(&project.id)})),
         "reload_preview" => jobs.reload_preview(project),
+        "list_widget_catalog" => {
+            let mut input = args.clone();
+            input["limit"] = json!(input["limit"].as_u64().unwrap_or(100).min(200));
+            crate::widget_library::list(projects, &project, &input)
+        }
+        "widget_insert_options" => crate::widget_library::configure(jobs, &project, args).await,
+        "insert_widget" => crate::widget_library::insert(jobs, &project, args, true).await,
         "restart_preview" => jobs.restart_preview(project),
         "analyze" | "test" => jobs.analyze(project, name),
         "build" => jobs.build(project, required(args, "target")?, args),

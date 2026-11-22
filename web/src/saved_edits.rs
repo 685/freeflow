@@ -48,7 +48,12 @@ pub fn writing(route: &str, method: &str) -> Option<(String, u64)> {
         ("PUT", "file")
             | (
                 "POST",
-                "widgets" | "theme" | "asset" | "theme-values" | "theme-binding"
+                "widgets"
+                    | "theme"
+                    | "asset"
+                    | "theme-values"
+                    | "theme-binding"
+                    | "widget-library-insert"
             )
     ) {
         return None;

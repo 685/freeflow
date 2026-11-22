@@ -9,9 +9,11 @@ use std::{
 
 mod components;
 mod design;
+pub(crate) mod library;
 mod properties;
 pub(crate) use components::Scope;
 pub(crate) use components::component_at;
+pub(crate) use design::import_reference;
 pub(crate) use design::{
     design_binding, design_import, design_reference, design_values, edit_design_value,
 };
@@ -576,6 +578,7 @@ fn inspect(source: &str) -> Result<(Vec<Token<'_>>, Vec<Node<'_>>)> {
 fn inspect_in<'a>(source: &'a str, scope: &Scope) -> Result<(Vec<Token<'a>>, Vec<Node<'a>>)> {
     let tokens = tokenize(source)?;
     let mut custom = scope.names.clone();
+    custom.extend(scope.external.clone());
     components::add_names(&components::classes(&tokens), &mut custom);
     let mut nodes: Vec<Node<'_>> = vec![];
     let mut parents: Vec<usize> = vec![];
@@ -647,7 +650,7 @@ fn inspect_in<'a>(source: &'a str, scope: &Scope) -> Result<(Vec<Token<'a>>, Vec
             line,
             column: source[line_start..token.start].encode_utf16().count() + 1,
             symbol: source[..token.start].encode_utf16().count(),
-            component: custom.contains(kind),
+            component: custom.contains(kind) && !scope.external.contains(kind),
             parent,
             args: args(&tokens, open),
             spec: CATALOG
@@ -839,7 +842,7 @@ pub(crate) fn outline_in(source: &str, scope: &Scope) -> Result<Value> {
             "parent": parent.map(|parent| &parent.id), "label": label,
             "slots": slots, "slotChoices": choices, "properties": properties, "arguments":arguments, "removable": membership.is_some(),
             "movable": membership.as_ref().is_some_and(|entry| entry.list.is_some()),
-            "listSlot": membership.as_ref().and_then(|entry| entry.slot), "wrappable": !typed_app_bar })
+            "listSlot": membership.as_ref().and_then(|entry| entry.slot), "wrappable": !typed_app_bar, "libraryChildren": !CATALOG.widgets.contains_key(node.kind) || !slots.is_empty() })
     }).collect();
     Ok(
         json!({ "palette": CATALOG.palette.iter().map(|(name, _)| name).collect::<Vec<_>>(),

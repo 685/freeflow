@@ -55,10 +55,35 @@ impl Analyzers {
     }
 
     pub async fn editor(&self, jobs: &Jobs, project: &Project, input: &Value) -> Result<Value> {
+        self.editor_snapshot(jobs, project, input, false).await
+    }
+
+    pub async fn saved_editor(
+        &self,
+        jobs: &Jobs,
+        project: &Project,
+        input: &Value,
+    ) -> Result<Value> {
+        self.editor_snapshot(jobs, project, input, true).await
+    }
+
+    async fn editor_snapshot(
+        &self,
+        jobs: &Jobs,
+        project: &Project,
+        input: &Value,
+        saved: bool,
+    ) -> Result<Value> {
         let action = required(input, "action")?;
         if !matches!(
             action,
-            "complete" | "properties" | "diagnose" | "definition" | "references" | "hover"
+            "complete"
+                | "properties"
+                | "signature"
+                | "diagnose"
+                | "definition"
+                | "references"
+                | "hover"
         ) {
             return Err(Problem::new(400, "Choose a Dart editor action."));
         }
@@ -97,6 +122,23 @@ impl Analyzers {
             }
             let analyzer = session.as_mut().unwrap();
             analyzer.last = Instant::now();
+            if saved {
+                let others: Vec<_> = analyzer
+                    .documents
+                    .keys()
+                    .filter(|open| open.as_str() != uri.as_str())
+                    .cloned()
+                    .collect();
+                for other in others {
+                    analyzer.documents.remove(&other);
+                    analyzer
+                        .notify(
+                            "textDocument/didClose",
+                            json!({"textDocument":{"uri":other}}),
+                        )
+                        .await?;
+                }
+            }
             analyzer
                 .query(
                     action,
@@ -415,6 +457,19 @@ impl Analyzer {
                 }
                 Ok(json!({"items":items}))
             }
+            "signature" => {
+                let mut result = self
+                    .request("textDocument/signatureHelp", params.clone())
+                    .await?;
+                if result["signatures"].as_array().is_none_or(Vec::is_empty) {
+                    self.wait_for_diagnostics(uri).await?;
+                    result = self.request("textDocument/signatureHelp", params).await?;
+                }
+                let signatures: Vec<_> = result["signatures"].as_array().into_iter().flatten().take(4).map(|signature| {
+                    json!({"label":clip(&signature["label"],16000),"parameters":signature["parameters"].as_array().map(|parameters|parameters.iter().take(101).map(|parameter|json!({"label":parameter["label"]})).collect::<Vec<_>>())})
+                }).collect();
+                Ok(json!({"signatures":signatures}))
+            }
             "definition" => {
                 self.wait_for_diagnostics(uri).await?;
                 let result = self.request("textDocument/definition", params).await?;
@@ -556,10 +611,12 @@ fn completions(result: &Value, prefix: &str, properties: bool) -> Vec<Value> {
 }
 
 fn diagnostics(values: &Value) -> Vec<Value> {
+    let mut values: Vec<_> = values.as_array().into_iter().flatten().collect();
+    // Keep compile errors visible to callers that validate an edit, even when
+    // the file contains more warnings than the response limit.
+    values.sort_by_key(|item| item["severity"].as_u64().unwrap_or(3));
     values
-        .as_array()
         .into_iter()
-        .flatten()
         .take(120)
         .filter_map(|item| {
             let range: Range = serde_json::from_value(item["range"].clone()).ok()?;
@@ -623,6 +680,16 @@ fn hover(contents: &Value) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn diagnostic_limits_cannot_hide_an_error_after_many_warnings() {
+        let range = json!({"start":{"line":0,"character":0},"end":{"line":0,"character":1}});
+        let mut values = vec![json!({"range":range,"message":"warning","severity":2}); 140];
+        values.push(json!({"range":range,"message":"invalid constructor argument","severity":1}));
+        let result = diagnostics(&json!(values));
+        assert_eq!(result.len(), 120);
+        assert_eq!(result[0]["message"], "invalid constructor argument");
+    }
 
     #[test]
     fn property_suggestions_keep_named_parameters_before_applying_the_result_limit() {

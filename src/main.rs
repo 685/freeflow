@@ -24,6 +24,7 @@ mod stores;
 #[cfg(test)]
 mod tests;
 mod visual;
+mod widget_library;
 
 use anyhow::{Context, Result, ensure};
 use clap::{Parser, Subcommand};

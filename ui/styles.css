@@ -407,6 +407,17 @@ textarea.editor-input::selection { background: #8470f34d; }
 .design-value-row code { white-space: pre-wrap; }
 .design-swatch { width: 20px; height: 20px; border: 1px solid var(--border-strong); border-radius: 4px; flex-shrink: 0; }
 .design-value-action { font-size: 11px; color: var(--accent); }
+.modal:has(#widget-library-results) { width: min(740px, calc(100vw - 24px)); height: min(86vh, 820px); }
+.modal:has(#widget-library-results) .modal-body { display: flex; flex: 1; flex-direction: column; overflow: hidden; }
+.modal:has(#widget-library-results) .modal-body > * { flex-shrink: 0; }
+.modal #widget-library-results { display: grid; align-content: start; gap: 6px; flex: 1 1 0; min-height: 70px; overflow: auto; }
+.widget-library-controls .design-filters { margin-bottom: 12px; }
+.library-parameter { padding-block: 10px; border-bottom: 1px solid var(--border); }
+.library-parameter > span { display: flex; align-items: center; flex-wrap: wrap; gap: 7px; }
+.library-parameter > span > small { margin-left: auto; overflow-wrap: anywhere; }
+.required-label { color: var(--accent); font-size: 10px; }
+.library-optional .library-parameter:last-child { border-bottom: 0; }
+.widget-constructor-form #widget-library-check { white-space: pre-wrap; overflow-wrap: anywhere; }
 .design-value-editor .form-grid { align-items: start; }
 .property-tools { flex-wrap: wrap; }
 @media (max-width: 450px) { .design-filters { grid-template-columns: 1fr; } .design-value-row { padding: 8px; } }

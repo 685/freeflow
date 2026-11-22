@@ -250,7 +250,7 @@ fn tools(editing: bool) -> Vec<Value> {
     let mut tools: Vec<_> = mcp::definitions().iter().filter_map(|tool| {
         let name = tool["name"].as_str()?;
         let allowed = match name {
-            "list_files" | "list_assets" | "read_design_values" | "read_file" | "inspect_widgets" | "read_widget_property" | "read_project_rules" | "read_app_logs" => true,
+            "list_files" | "list_assets" | "list_widget_catalog" | "read_design_values" | "read_file" | "inspect_widgets" | "read_widget_property" | "read_project_rules" | "read_app_logs" => true,
             "write_file" | "edit_widget" => editing,
             _ => false,
         };
@@ -391,6 +391,13 @@ impl Workspace<'_> {
             catalog["pendingManifest"] = json!(self.pending.contains_key("pubspec.yaml"));
             return Ok(catalog);
         }
+        if name == "list_widget_catalog" {
+            let mut input = input;
+            input["limit"] = json!(input["limit"].as_u64().unwrap_or(80).min(100));
+            let mut catalog = crate::widget_library::list(self.projects, self.project, &input)?;
+            catalog["pendingFiles"] = json!(self.pending.keys().collect::<Vec<_>>());
+            return Ok(catalog);
+        }
         if name == "read_design_values" {
             let mut catalog = crate::design_values::context(self.projects, self.project, &input)?;
             catalog["pendingFiles"] = json!(self.pending.keys().collect::<Vec<_>>());
@@ -436,7 +443,8 @@ impl Workspace<'_> {
                         "Read the widget outline again and use its current revision.",
                     ));
                 }
-                let scope = visual::Scope::for_source(self.project, path, &file.content);
+                let scope =
+                    visual::Scope::for_source(self.projects, self.project, path, &file.content);
                 let mut data = visual::property_details_in(
                     &file.content,
                     required(&input, "id")?,
@@ -448,7 +456,8 @@ impl Workspace<'_> {
             }
             "inspect_widgets" if path.ends_with(".dart") => {
                 let file = self.existing(path)?;
-                let scope = visual::Scope::for_source(self.project, path, &file.content);
+                let scope =
+                    visual::Scope::for_source(self.projects, self.project, path, &file.content);
                 let mut outline = visual::outline_in(&file.content, &scope)?;
                 if let Some(nodes) = outline["nodes"].as_array_mut() {
                     nodes.truncate(220);
@@ -464,7 +473,8 @@ impl Workspace<'_> {
             ),
             "edit_widget" if editing && path.ends_with(".dart") => {
                 let file = self.existing(path)?;
-                let scope = visual::Scope::for_source(self.project, path, &file.content);
+                let scope =
+                    visual::Scope::for_source(self.projects, self.project, path, &file.content);
                 let content = visual::edit_in(&file.content, &input["command"], &scope)?;
                 self.stage(path, revision(&input)?, content)
             }

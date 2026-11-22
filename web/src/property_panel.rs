@@ -10,15 +10,15 @@ thread_local! { static SEARCH: RefCell<String> = RefCell::default(); }
 
 #[derive(Clone)]
 pub(crate) struct Context {
-    project: String,
-    path: String,
-    revision: Value,
-    widget: String,
-    generation: u64,
+    pub(crate) project: String,
+    pub(crate) path: String,
+    pub(crate) revision: Value,
+    pub(crate) widget: String,
+    pub(crate) generation: u64,
 }
 
 impl Context {
-    async fn capture() -> Result<Self> {
+    pub(crate) async fn capture() -> Result<Self> {
         let generation = state::read(|state| state.generation);
         for _ in 0..80 {
             let (current, pending) = state::read(|state| {
@@ -56,7 +56,7 @@ impl Context {
         })
     }
 
-    fn current(&self) -> bool {
+    pub(crate) fn current(&self) -> bool {
         state::read(|state| {
             state.project_id() == self.project
                 && state.generation == self.generation

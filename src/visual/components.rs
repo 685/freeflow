@@ -1,7 +1,7 @@
 use super::*;
 use crate::{
     files,
-    projects::{self, Project},
+    projects::{self, Project, Projects},
 };
 use std::collections::VecDeque;
 
@@ -24,15 +24,38 @@ const BASES: &[&str] = &[
 pub(crate) struct Scope {
     pub(super) names: HashSet<String>,
     pub truncated: bool,
+    pub(super) external: HashSet<String>,
 }
 
 pub(super) struct Class {
     pub(super) name: String,
     base: String,
-    name_token: usize,
+    pub(super) name_token: usize,
     pub(super) open: usize,
     pub(super) close: usize,
     argument: Option<(String, usize)>,
+}
+
+// Declaration headers may be followed by `extends` or `implements`, unlike
+// generic constructor expressions handled by `type_end`.
+pub(super) fn declaration_type_end(tokens: &[Token<'_>], start: usize, limit: usize) -> usize {
+    if at(tokens, start) != "<" {
+        return start;
+    }
+    let mut depth = 0usize;
+    for index in start..limit {
+        match at(tokens, index) {
+            "<" => depth += 1,
+            ">" => {
+                depth -= 1;
+                if depth == 0 {
+                    return index;
+                }
+            }
+            _ => {}
+        }
+    }
+    start
 }
 
 pub(super) fn classes(tokens: &[Token<'_>]) -> Vec<Class> {
@@ -45,6 +68,10 @@ pub(super) fn classes(tokens: &[Token<'_>]) -> Vec<Class> {
         }
         let name = at(tokens, index + 1);
         let mut cursor = index + 2;
+        let generic = declaration_type_end(tokens, cursor, tokens.len());
+        if generic > cursor {
+            cursor = generic + 1;
+        }
         let mut base = "";
         let mut argument = None;
         while cursor < tokens.len() && !matches!(at(tokens, cursor), "{" | ";") {
@@ -207,7 +234,25 @@ fn directives(tokens: &[Token<'_>]) -> Vec<Directive> {
     result
 }
 
+pub(crate) fn decoded_uri(uri: &str) -> Option<String> {
+    let mut bytes = Vec::new();
+    let mut input = uri.bytes();
+    while let Some(byte) = input.next() {
+        if byte == b'%' {
+            let high = (input.next()? as char).to_digit(16)?;
+            let low = (input.next()? as char).to_digit(16)?;
+            bytes.push((high * 16 + low) as u8);
+        } else {
+            bytes.push(byte);
+        }
+    }
+    let path = String::from_utf8(bytes).ok()?;
+    (!path.contains(['\0', '\\'])).then_some(path)
+}
+
 fn relative_import(from: &str, uri: &str, package: &str) -> Option<String> {
+    let uri = decoded_uri(uri)?;
+    let uri = uri.as_str();
     let path = if let Some(uri) = uri.strip_prefix("package:") {
         let (name, relative) = uri.split_once('/')?;
         if name != package {
@@ -236,8 +281,16 @@ fn relative_import(from: &str, uri: &str, package: &str) -> Option<String> {
 }
 
 impl Scope {
-    pub(crate) fn for_source(project: &Project, path: &str, source: &str) -> Self {
-        let mut scope = Self::default();
+    pub(crate) fn for_source(
+        projects: &Projects,
+        project: &Project,
+        path: &str,
+        source: &str,
+    ) -> Self {
+        let mut scope = Self {
+            external: crate::widget_library::external_names(projects, project),
+            ..Self::default()
+        };
         let package = projects::package_name(project).unwrap_or_default();
         let mut queue = VecDeque::from([(path.to_owned(), true, true)]);
         let mut seen = HashMap::new();
@@ -284,6 +337,7 @@ impl Scope {
                 }
             }
         }
+        scope.names.extend(scope.external.clone());
         add_names(&all, &mut scope.names);
         scope.names.retain(|name| visible.contains(name));
         scope
