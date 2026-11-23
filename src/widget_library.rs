@@ -18,6 +18,8 @@ use std::{
     time::{Duration, Instant},
 };
 
+pub(crate) mod switching;
+
 #[derive(Clone)]
 struct Package {
     root: PathBuf,
@@ -268,6 +270,17 @@ fn packages(
     project: Option<&Project>,
     refresh: bool,
 ) -> (Vec<Arc<PackageFiles>>, bool) {
+    let (packages, truncated) = package_sources(projects, project);
+    (
+        packages
+            .into_iter()
+            .map(|package| read_package(package, refresh))
+            .collect(),
+        truncated,
+    )
+}
+
+fn package_sources(projects: &Projects, project: Option<&Project>) -> (Vec<Package>, bool) {
     let mut packages = vec![];
     if let Ok(Some(sdk)) = Flutter::selected_at(&projects.home) {
         if let Some(root) = dunce::canonicalize(&sdk.file)
@@ -279,19 +292,16 @@ fn packages(
             })
             .filter(|root| root.join("src/widgets/framework.dart").is_file())
         {
-            packages.push(read_package(
-                Package {
-                    root,
-                    name: "flutter".into(),
-                    category: "Framework",
-                    roots: vec![
-                        "widgets.dart".into(),
-                        "material.dart".into(),
-                        "cupertino.dart".into(),
-                    ],
-                },
-                refresh,
-            ));
+            packages.push(Package {
+                root,
+                name: "flutter".into(),
+                category: "Framework",
+                roots: vec![
+                    "widgets.dart".into(),
+                    "material.dart".into(),
+                    "cupertino.dart".into(),
+                ],
+            });
         }
     }
     let Some(project) = project else {
@@ -363,15 +373,12 @@ fn packages(
         if public.is_empty() {
             continue;
         }
-        packages.push(read_package(
-            Package {
-                root,
-                name: name.into(),
-                category: "Dependencies",
-                roots: public,
-            },
-            refresh,
-        ));
+        packages.push(Package {
+            root,
+            name: name.into(),
+            category: "Dependencies",
+            roots: public,
+        });
     }
     (packages, truncated)
 }
@@ -910,13 +917,17 @@ fn choice(catalog: &Catalog, input: &Value) -> Result<Choice> {
 }
 
 fn current_choice(choice: &Choice) -> Result<()> {
-    let text = fs::read_to_string(&choice.file).map_err(|_| {
+    current_definition(&choice.file, &choice.revision)
+}
+
+fn current_definition(path: &Path, revision: &str) -> Result<()> {
+    let text = files::read_source(path, "definition.dart").map_err(|_| {
         Problem::new(
             409,
             "This widget definition was removed. Refresh the widget library.",
         )
     })?;
-    if files::revision(text) != choice.revision {
+    if text.revision.as_deref() != Some(revision) {
         return Err(Problem::new(
             409,
             "This widget definition changed. Refresh the widget library.",
@@ -974,6 +985,16 @@ fn default_argument(parameter: &Parameter) -> Value {
     }
 }
 
+fn parameter_form(parameter: &Parameter, argument: Value) -> Value {
+    let mut value = json!(parameter);
+    value["argument"] = argument;
+    value["suggestion"] = default_argument(&Parameter {
+        required: true,
+        ..parameter.clone()
+    });
+    value
+}
+
 struct Options {
     file: files::Source,
     choice: Choice,
@@ -1013,15 +1034,7 @@ pub async fn configure(jobs: &Jobs, project: &Project, input: &Value) -> Result<
     let parameters: Vec<_> = options
         .parameters
         .iter()
-        .map(|parameter| {
-            let mut value = json!(parameter);
-            value["argument"] = default_argument(parameter);
-            value["suggestion"] = default_argument(&Parameter {
-                required: true,
-                ..parameter.clone()
-            });
-            value
-        })
+        .map(|parameter| parameter_form(parameter, default_argument(parameter)))
         .collect();
     Ok(json!({
         "entry":options.choice.value, "signature":options.signature["label"],
@@ -1155,7 +1168,8 @@ fn argument(parameter: &Parameter, value: &Value, namespace: &str) -> Result<Opt
 
 struct Prepared {
     file: files::Source,
-    choice: Choice,
+    definition: PathBuf,
+    definition_revision: String,
     content: String,
     selected: String,
 }
@@ -1236,28 +1250,12 @@ async fn prepare(
             }
         })
         .collect();
-    let needs_framework = values
-        .iter()
-        .zip(&options.parameters)
-        .any(|(value, parameter)| {
-            value["mode"] == "empty"
-                || value["mode"] == "default"
-                    && parameter.kind.trim_end_matches('?') != "VoidCallback"
-        });
-    let namespace = if needs_framework {
-        let (next, name, added) = visual::import_reference(
-            &text,
-            &[
-                "package:flutter/widgets.dart".into(),
-                "package:flutter/material.dart".into(),
-                "package:flutter/cupertino.dart".into(),
-            ],
-            "SizedBox",
-            "freeflowFramework",
-        )?;
+    let pairs = values.iter().zip(&options.parameters);
+    let namespace = if needs_framework(pairs) {
+        let (next, name, added) = framework_namespace(&text)?;
         text = next;
         shift += added;
-        name.strip_suffix("SizedBox").unwrap_or_default().to_owned()
+        name
     } else {
         String::new()
     };
@@ -1305,7 +1303,8 @@ async fn prepare(
     };
     Ok(Prepared {
         file: options.file,
-        choice: options.choice,
+        definition: options.choice.file,
+        definition_revision: options.choice.revision,
         content,
         selected,
     })
@@ -1325,6 +1324,41 @@ pub async fn apply(
         ));
     }
     let prepared = prepare(jobs, project, input, operation).await?;
+    finish(jobs, project, input, prepared, save).await
+}
+
+fn needs_framework<'a>(mut arguments: impl Iterator<Item = (&'a Value, &'a Parameter)>) -> bool {
+    arguments.any(|(value, parameter)| {
+        value["mode"] == "empty"
+            || value["mode"] == "default" && parameter.kind.trim_end_matches('?') != "VoidCallback"
+    })
+}
+
+fn framework_namespace(source: &str) -> Result<(String, String, usize)> {
+    let (source, name, shift) = visual::import_reference(
+        source,
+        &[
+            "package:flutter/widgets.dart".into(),
+            "package:flutter/material.dart".into(),
+            "package:flutter/cupertino.dart".into(),
+        ],
+        "SizedBox",
+        "freeflowFramework",
+    )?;
+    Ok((
+        source,
+        name.strip_suffix("SizedBox").unwrap_or_default().into(),
+        shift,
+    ))
+}
+
+async fn finish(
+    jobs: &Jobs,
+    project: &Project,
+    input: &Value,
+    prepared: Prepared,
+    save: bool,
+) -> Result<Value> {
     let diagnostics = jobs.analyzers.saved_editor(
         jobs,
         project,
@@ -1332,7 +1366,7 @@ pub async fn apply(
     ).await?;
     if !save {
         source(&jobs.projects, project, input)?;
-        current_choice(&prepared.choice)?;
+        current_definition(&prepared.definition, &prepared.definition_revision)?;
         return Ok(diagnostics);
     }
     let errors: Vec<_> = diagnostics["diagnostics"]
@@ -1349,14 +1383,14 @@ pub async fn apply(
             format!("Dart found a problem. {}", errors.join(" ")),
         ));
     }
-    current_choice(&prepared.choice)?;
+    current_definition(&prepared.definition, &prepared.definition_revision)?;
     let file = jobs.projects.update(
         project,
         &prepared.file.path,
         prepared.file.revision.as_deref(),
         |_| {
-            current_choice(&prepared.choice)?;
-            Ok(prepared.content.clone())
+            current_definition(&prepared.definition, &prepared.definition_revision)?;
+            Ok(prepared.content)
         },
     )?;
     Ok(json!({"source":file,"widget":prepared.selected}))

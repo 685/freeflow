@@ -9,6 +9,8 @@ use std::{cell::RefCell, rc::Rc};
 use wasm_bindgen::JsCast;
 use web_sys::{Element, HtmlInputElement};
 
+pub(crate) mod switching;
+
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Operation {
     Insert,
@@ -25,7 +27,7 @@ struct Filter {
 thread_local! {
     static FILTERS: RefCell<[Filter; 2]> = RefCell::default();
     static CATALOG: RefCell<Option<(Operation, Rc<Value>)>> = const { RefCell::new(None) };
-    static PARAMETERS: RefCell<Value> = const {RefCell::new(Value::Null)};
+    static FORM: RefCell<Value> = const {RefCell::new(Value::Null)};
 }
 
 fn input(context: &Context, operation: Operation) -> Value {
@@ -369,10 +371,13 @@ pub async fn act(
     Ok(())
 }
 
-fn modes(parameter: &Value, selected: &str) -> String {
+fn modes(parameter: &Value, selected: &str, has_existing: bool) -> String {
     let mut modes = vec![];
     if parameter["required"] != true {
         modes.push(("omit", "Use constructor default"));
+    }
+    if has_existing {
+        modes.push(("keep", "Use existing value"));
     }
     match string(&parameter["kind"]).trim_end_matches('?') {
         "String" => modes.push(("string", "Text")),
@@ -399,12 +404,43 @@ fn modes(parameter: &Value, selected: &str) -> String {
         .collect()
 }
 
-fn argument_input(parameter: &Value, index: usize, mode: &str, value: &str) -> String {
+fn argument_input(
+    parameter: &Value,
+    index: usize,
+    mode: &str,
+    value: &str,
+    existing: &[Value],
+) -> String {
     let label = h(&caption(string(&parameter["name"])));
     match mode {
         "omit" => r#"<small>The constructor's default value is kept.</small>"#.into(),
         "default" => r#"<small>A value suitable for this parameter is supplied.</small>"#.into(),
         "empty" => r#"<small>An empty placeholder widget is supplied.</small>"#.into(),
+        "keep" => {
+            let options: String = existing
+                .iter()
+                .map(|argument| {
+                    let name = string(&argument["name"]);
+                    let expression = string(&argument["expression"]);
+                    let preview: String = expression.chars().take(70).collect();
+                    format!(
+                        r#"<option value="{}"{}>{} · {}{}</option>"#,
+                        h(name),
+                        if name == value { " selected" } else { "" },
+                        h(name),
+                        h(&preview),
+                        if preview != expression || argument["truncated"] == true {
+                            "…"
+                        } else {
+                            ""
+                        }
+                    )
+                })
+                .collect();
+            format!(
+                r#"<select id="widget-argument-value-{index}" aria-label="{label}"><option value="">Choose an existing argument</option>{options}</select>"#
+            )
+        }
         "bool" => format!(
             r#"<select id="widget-argument-value-{index}" aria-label="{label}"><option value="false"{}>False</option><option value="true"{}>True</option></select>"#,
             if value != "true" { " selected" } else { "" },
@@ -427,7 +463,7 @@ fn argument_input(parameter: &Value, index: usize, mode: &str, value: &str) -> S
     }
 }
 
-fn parameter_row(parameter: &Value, index: usize, child_slot: &str) -> String {
+fn parameter_row(parameter: &Value, index: usize, child_slot: &str, existing: &[Value]) -> String {
     let mode = string(&parameter["argument"]["mode"]);
     let value = dom::display(&parameter["argument"]["value"]);
     format!(
@@ -446,8 +482,8 @@ fn parameter_row(parameter: &Value, index: usize, child_slot: &str) -> String {
         },
         h(string(&parameter["kind"])),
         h(&caption(string(&parameter["name"]))),
-        modes(parameter, mode),
-        argument_input(parameter, index, mode, &value)
+        modes(parameter, mode, !existing.is_empty()),
+        argument_input(parameter, index, mode, &value, existing)
     )
 }
 
@@ -458,7 +494,6 @@ fn constructor(
     config: Value,
     slot: String,
 ) {
-    PARAMETERS.with_borrow_mut(|value| *value = config["parameters"].clone());
     let wrapping = operation == Operation::Wrap;
     let child_slot = if wrapping {
         items(&config["slots"])
@@ -477,26 +512,7 @@ fn constructor(
     } else {
         String::new()
     };
-    let parameters = items(&config["parameters"]);
-    let required: String = parameters
-        .iter()
-        .enumerate()
-        .filter(|(_, parameter)| parameter["required"] == true)
-        .map(|(index, parameter)| parameter_row(parameter, index, child_slot))
-        .collect();
-    let optional: String = parameters
-        .iter()
-        .enumerate()
-        .filter(|(_, parameter)| parameter["required"] != true)
-        .map(|(index, parameter)| parameter_row(parameter, index, child_slot))
-        .collect();
-    let optional = if optional.is_empty() {
-        String::new()
-    } else {
-        format!(
-            r#"<details class="library-optional"><summary>Optional parameters</summary>{optional}</details>"#
-        )
-    };
+    let parameters = form_parameters(&config, child_slot);
     let intent = if wrapping {
         format!(
             "Wrap {}. Dart checks the change before saving.",
@@ -514,7 +530,7 @@ fn constructor(
         "Insert widget"
     };
     let body = format!(
-        r#"<form class="form widget-constructor-form"><p class="dialog-help">{intent}</p>{child}{required}{optional}<div id="widget-library-check" class="dialog-help" role="status"></div><div class="form-error" role="alert"></div><div class="form-footer">{}{}<button type="submit" class="button primary">{submit}</button></div></form>"#,
+        r#"<form class="form widget-constructor-form"><p class="dialog-help">{intent}</p>{child}{parameters}<div id="widget-library-check" class="dialog-help" role="status"></div><div class="form-error" role="alert"></div><div class="form-footer">{}{}<button type="submit" class="button primary">{submit}</button></div></form>"#,
         action("library-back", "Back", "soft"),
         action("library-check", "Check Dart", "outline")
     );
@@ -536,6 +552,27 @@ fn constructor(
         "Configure the widget's constructor parameters.",
         body,
     );
+}
+
+fn form_parameters(config: &Value, child_slot: &str) -> String {
+    FORM.with_borrow_mut(|value| *value = config.clone());
+    let mut required = String::new();
+    let mut optional = String::new();
+    let existing = items(&config["existing"]);
+    for (index, parameter) in items(&config["parameters"]).iter().enumerate() {
+        let group = if parameter["required"] == true {
+            &mut required
+        } else {
+            &mut optional
+        };
+        group.push_str(&parameter_row(parameter, index, child_slot, existing));
+    }
+    if !optional.is_empty() {
+        required.push_str(&format!(
+            r#"<details class="library-optional"><summary>Optional parameters</summary>{optional}</details>"#
+        ));
+    }
+    required
 }
 
 fn arguments(config: &Value, child_slot: Option<&str>) -> Value {
@@ -592,27 +629,29 @@ pub async fn value_action(
         && context.current()
         && proposed == request(context, operation, config, slot)
     {
-        match result {
-            Ok(result) => {
-                let errors: Vec<_> = items(&result["diagnostics"])
-                    .iter()
-                    .filter(|diagnostic| diagnostic["severity"] == 1)
-                    .take(5)
-                    .map(|diagnostic| string(&diagnostic["message"]))
-                    .collect();
-                dom::text(
-                    "widget-library-check",
-                    &if errors.is_empty() {
-                        "Dart found no errors in this file.".into()
-                    } else {
-                        errors.join("\n")
-                    },
-                );
-            }
-            Err(error) => dom::text("widget-library-check", &error.message),
-        }
+        show_check(result);
     }
     Ok(())
+}
+
+fn show_check(result: Result<Value>) {
+    let text = match result {
+        Ok(result) => {
+            let errors: Vec<_> = items(&result["diagnostics"])
+                .iter()
+                .filter(|diagnostic| diagnostic["severity"] == 1)
+                .take(5)
+                .map(|diagnostic| string(&diagnostic["message"]))
+                .collect();
+            if errors.is_empty() {
+                "Dart found no errors in this file.".into()
+            } else {
+                errors.join("\n")
+            }
+        }
+        Err(error) => error.message,
+    };
+    dom::text("widget-library-check", &text);
 }
 
 pub async fn save(
@@ -638,6 +677,20 @@ pub async fn save(
         request(context, operation, config, slot),
     )
     .await?;
+    saved(
+        context,
+        &result,
+        version,
+        if operation == Operation::Wrap {
+            "Widget wrapped"
+        } else {
+            "Widget inserted"
+        },
+    )
+    .await
+}
+
+async fn saved(context: &Context, result: &Value, version: u64, message: &str) -> Result {
     if context.current() {
         crate::preview_inspector::show_tree(false);
         crate::load_file(&context.path, true).await?;
@@ -657,14 +710,7 @@ pub async fn save(
         });
     }
     dialogs::close_current(version);
-    dom::toast(
-        if operation == Operation::Wrap {
-            "Widget wrapped"
-        } else {
-            "Widget inserted"
-        },
-        false,
-    );
+    dom::toast(message, false);
     Ok(())
 }
 
@@ -675,6 +721,7 @@ pub fn initialize() {
         }
         if dom::find(".widget-constructor-form").is_some() {
             dom::text("widget-library-check", "");
+            FORM.with_borrow(switching::refresh_removed);
         }
     });
     dom::listen(&id("modal-body"), "change", |event| {
@@ -708,18 +755,20 @@ pub fn initialize() {
         else {
             return;
         };
-        let parameter = PARAMETERS.with_borrow(|parameters| items(parameters).get(index).cloned());
-        let Some(parameter) = parameter else {
-            return;
-        };
-        let mode = dom::value(&target);
-        let value = dom::find(&format!("#widget-argument-value-{index}"))
-            .map(|field| dom::value(&field))
-            .unwrap_or_else(|| dom::display(&parameter["suggestion"]["value"]));
-        dom::html(
-            &format!("widget-argument-input-{index}"),
-            argument_input(&parameter, index, &mode, &value),
-        );
+        FORM.with_borrow(|config| {
+            let Some(parameter) = items(&config["parameters"]).get(index) else {
+                return;
+            };
+            let mode = dom::value(&target);
+            let value = dom::find(&format!("#widget-argument-value-{index}"))
+                .map(|field| dom::value(&field))
+                .unwrap_or_else(|| dom::display(&parameter["suggestion"]["value"]));
+            dom::html(
+                &format!("widget-argument-input-{index}"),
+                argument_input(parameter, index, &mode, &value, items(&config["existing"])),
+            );
+            switching::refresh_removed(config);
+        });
         dom::text("widget-library-check", "");
     });
 }

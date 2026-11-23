@@ -553,6 +553,45 @@
     "annotations": {"readOnlyHint": false, "openWorldHint": false}
   },
   {
+    "name": "widget_constructor_options",
+    "description": "List alternate constructors of the selected saved widget. Set constructor and entryRevision from the list to read its parameter form and existing arguments without saving.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "projectId": {"type": "string", "description": "Omit for a project-scoped connection."},
+        "path": {"type": "string", "description": "Dart file containing the widget."},
+        "revision": {"type": "string", "description": "Source revision from inspect_widgets."},
+        "id": {"type": "string", "description": "Widget ID from inspect_widgets."},
+        "constructor": {"type": "string", "description": "Constructor suffix returned by this tool. The empty string selects the unnamed constructor."},
+        "entryRevision": {"type": "string", "description": "Definition revision from the selected entry."}
+      },
+      "required": ["path", "revision", "id"],
+      "additionalProperties": false
+    },
+    "annotations": {"readOnlyHint": true, "openWorldHint": false}
+  },
+  {
+    "name": "switch_widget_constructor",
+    "description": "Switch a widget to another constructor of the same Dart class. Dart checks the resulting file before saving a single Undo edit. Read widget_constructor_options first.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "projectId": {"type": "string", "description": "Omit for a project-scoped connection."},
+        "path": {"type": "string", "description": "Dart file containing the widget."},
+        "revision": {"type": "string", "description": "Source revision from inspect_widgets."},
+        "id": {"type": "string", "description": "Widget ID from inspect_widgets."},
+        "constructor": {"type": "string", "description": "Constructor suffix from widget_constructor_options. Use the empty string for the unnamed constructor."},
+        "entryRevision": {"type": "string", "description": "Definition revision from the selected entry."},
+        "signatureRevision": {"type": "string", "description": "Parameter revision from widget_constructor_options."},
+        "arguments": {"type": "object", "description": "Parameters mapped to {mode,value}. Defaults come from widget_constructor_options. Use mode keep with the existing argument name to carry its exact Dart expression."},
+        "allowDrop": {"type": "boolean", "description": "Confirm that existing arguments which are not carried over may be removed or replaced."}
+      },
+      "required": ["path", "revision", "id", "constructor", "entryRevision", "signatureRevision"],
+      "additionalProperties": false
+    },
+    "annotations": {"readOnlyHint": false, "openWorldHint": false}
+  },
+  {
     "name": "start_preview",
     "description": "Start the real local Flutter web preview and return its job. Check preview_status for the preview URL.",
     "inputSchema": {

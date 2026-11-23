@@ -1111,6 +1111,7 @@ fn inspector_events() {
                 });
             }
             Some("wrap") => ui::spawn(widget_library::open(widget_library::Operation::Wrap)),
+            Some("switch-constructor") => ui::spawn(widget_library::switching::open()),
             Some("library") => ui::spawn(widget_library::open(widget_library::Operation::Insert)),
             Some("remove") => ui::spawn(visual_edit(json!({"id":node["id"],"operation":"remove"}))),
             Some("add") => ui::spawn(visual_edit(json!({"id":node["id"],"operation":"add",

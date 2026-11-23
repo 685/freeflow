@@ -67,6 +67,33 @@ impl Analyzers {
         self.editor_snapshot(jobs, project, input, true).await
     }
 
+    pub(crate) async fn saved_definitions(
+        &self,
+        jobs: &Jobs,
+        project: &Project,
+        path: &str,
+        text: &str,
+        offset: usize,
+    ) -> Result<Vec<Definition>> {
+        let result = self
+            .saved_editor(
+                jobs,
+                project,
+                &json!({"action":"definition-paths","path":path,"text":text,"offset":offset}),
+            )
+            .await?;
+        Ok(definition_entries(&result)
+            .iter()
+            .take(5)
+            .filter_map(|entry| {
+                Some(Definition {
+                    file: definition_file(entry)?,
+                    position: definition_position(entry)?,
+                })
+            })
+            .collect())
+    }
+
     async fn editor_snapshot(
         &self,
         jobs: &Jobs,
@@ -75,7 +102,7 @@ impl Analyzers {
         saved: bool,
     ) -> Result<Value> {
         let action = required(input, "action")?;
-        if !matches!(
+        if !(matches!(
             action,
             "complete"
                 | "properties"
@@ -84,7 +111,8 @@ impl Analyzers {
                 | "definition"
                 | "references"
                 | "hover"
-        ) {
+        ) || saved && action == "definition-paths")
+        {
             return Err(Problem::new(400, "Choose a Dart editor action."));
         }
         let path = required(input, "path")?;
@@ -187,6 +215,18 @@ struct Position {
 struct Range {
     start: Position,
     end: Position,
+}
+
+pub(crate) struct Definition {
+    pub file: PathBuf,
+    position: Position,
+}
+
+impl Definition {
+    pub fn points_to(&self, source: &str, byte: usize) -> bool {
+        offset(source, self.position)
+            .is_some_and(|offset| source[..byte].encode_utf16().count() == offset as usize)
+    }
 }
 
 fn position(source: &str, offset: u64) -> Result<Position> {
@@ -470,9 +510,12 @@ impl Analyzer {
                 }).collect();
                 Ok(json!({"signatures":signatures}))
             }
-            "definition" => {
+            "definition" | "definition-paths" => {
                 self.wait_for_diagnostics(uri).await?;
                 let result = self.request("textDocument/definition", params).await?;
+                if action == "definition-paths" {
+                    return Ok(result);
+                }
                 Ok(json!({"locations":definitions(&result, projects, project, uri, text, 5)}))
             }
             "references" => {
@@ -626,6 +669,22 @@ fn diagnostics(values: &Value) -> Vec<Value> {
         .collect()
 }
 
+fn definition_entries(result: &Value) -> &[Value] {
+    result
+        .as_array()
+        .map_or_else(|| std::slice::from_ref(result), Vec::as_slice)
+}
+
+fn definition_file(entry: &Value) -> Option<PathBuf> {
+    let uri = entry["targetUri"].as_str().or(entry["uri"].as_str())?;
+    dunce::canonicalize(Url::parse(uri).ok()?.to_file_path().ok()?).ok()
+}
+
+fn definition_position(entry: &Value) -> Option<Position> {
+    let range = entry.get("targetSelectionRange").unwrap_or(&entry["range"]);
+    serde_json::from_value(range["start"].clone()).ok()
+}
+
 fn definitions(
     result: &Value,
     projects: &Projects,
@@ -634,21 +693,17 @@ fn definitions(
     current_text: &str,
     limit: usize,
 ) -> Vec<Value> {
-    let entries = result
-        .as_array()
-        .map_or_else(|| std::slice::from_ref(result), Vec::as_slice);
-    entries
+    definition_entries(result)
         .iter()
         .filter_map(|entry| {
             let uri = entry["targetUri"].as_str().or(entry["uri"].as_str())?;
-            let absolute = dunce::canonicalize(Url::parse(uri).ok()?.to_file_path().ok()?).ok()?;
+            let absolute = definition_file(entry)?;
             let path = absolute
                 .strip_prefix(&project.root)
                 .ok()?
                 .to_str()?
                 .replace('\\', "/");
-            let range = entry.get("targetSelectionRange").unwrap_or(&entry["range"]);
-            let position: Position = serde_json::from_value(range["start"].clone()).ok()?;
+            let position = definition_position(entry)?;
             let file;
             let text = if current_uri == uri {
                 current_text

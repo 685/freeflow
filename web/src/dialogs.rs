@@ -123,6 +123,15 @@ pub(crate) enum View {
         config: Value,
         slot: String,
     },
+    WidgetConstructorPicker {
+        context: crate::property_panel::Context,
+        choices: std::rc::Rc<Value>,
+    },
+    WidgetSwitch {
+        context: crate::property_panel::Context,
+        choices: std::rc::Rc<Value>,
+        config: Value,
+    },
     AssetPicker {
         context: crate::property_panel::Context,
         name: String,
@@ -1099,6 +1108,9 @@ pub(crate) fn form_data(form: &Element) -> Value {
 
 async fn submit_view(view: View, version: u64, mut input: Value) -> Result {
     match view {
+        View::WidgetSwitch {
+            context, config, ..
+        } => crate::widget_library::switching::save(&context, &config, version).await?,
         View::WidgetConstructor {
             context,
             operation,
@@ -1206,6 +1218,18 @@ async fn submit_view(view: View, version: u64, mut input: Value) -> Result {
 
 async fn act(view: View, version: u64, action: &str, element: &Element) -> Result {
     match view {
+        View::WidgetConstructorPicker { context, choices } => {
+            crate::widget_library::switching::choose(&context, choices, version, action, element)
+                .await?
+        }
+        View::WidgetSwitch {
+            context,
+            choices,
+            config,
+        } => {
+            crate::widget_library::switching::act(&context, choices, &config, version, action)
+                .await?
+        }
         View::WidgetLibrary {
             context,
             operation,

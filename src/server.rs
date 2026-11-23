@@ -724,6 +724,24 @@ async fn project_route(
                 };
                 (200, apply(jobs, &project, &input, operation, true).await?)
             }
+            "widget-constructors" => (
+                200,
+                crate::widget_library::switching::alternatives(jobs, &project, &input).await?,
+            ),
+            "widget-constructor-options" => (
+                200,
+                crate::widget_library::switching::configure(jobs, &project, &input).await?,
+            ),
+            "widget-constructor-check" | "widget-constructor-switch" => (
+                200,
+                crate::widget_library::switching::apply(
+                    jobs,
+                    &project,
+                    &input,
+                    part == "widget-constructor-switch",
+                )
+                .await?,
+            ),
             "inspect" => (200, inspector::resolve(projects, &project, &input)?),
             "editor" => (200, jobs.analyzers.editor(jobs, &project, &input).await?),
             "git" => (202, git::operation(jobs, project, &input)?),

@@ -568,6 +568,7 @@ pub fn inspector(state: &State) {
         content.push_str(&format!(r#"<button type="button" class="icon-button" data-widget-action="remove" aria-label="Remove widget" title="Remove widget">{}</button>"#, icon("trash", 16)));
     }
     content.push_str("</div></div>");
+    content.push_str(r#"<button type="button" class="button outline small" data-widget-action="switch-constructor">Change constructor</button>"#);
     content.push_str(&crate::widget_clipboard::controls(node, false));
     content.push_str(&crate::component_panel::controls(node, false));
     content.push_str(&modifiers(state, node));

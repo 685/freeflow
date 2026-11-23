@@ -120,6 +120,17 @@ pub async fn call(
             crate::widget_library::list(projects, &project, &input)
         }
         "widget_insert_options" => crate::widget_library::configure(jobs, &project, args).await,
+        "widget_constructor_options" => {
+            use crate::widget_library::switching;
+            if args["constructor"].is_null() {
+                switching::alternatives(jobs, &project, args).await
+            } else {
+                switching::configure(jobs, &project, args).await
+            }
+        }
+        "switch_widget_constructor" => {
+            crate::widget_library::switching::apply(jobs, &project, args, true).await
+        }
         "insert_widget" | "wrap_widget" => {
             use crate::widget_library::{Operation, apply};
             let operation = if name == "wrap_widget" {

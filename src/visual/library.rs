@@ -1,6 +1,8 @@
 use super::*;
 use serde::{Deserialize, Serialize};
 
+pub(crate) mod switching;
+
 pub(crate) fn checked_expression(code: &str) -> Result<String> {
     properties::expression(&json!(code))
 }
@@ -8,6 +10,7 @@ pub(crate) fn checked_expression(code: &str) -> Result<String> {
 #[derive(Clone, Serialize, Deserialize)]
 pub(crate) struct Constructor {
     pub name: String,
+    pub symbol: usize,
     pub constant: bool,
     pub factory: bool,
     pub signature: String,
@@ -16,6 +19,7 @@ pub(crate) struct Constructor {
 #[derive(Clone)]
 pub(crate) struct Declaration {
     pub name: String,
+    pub symbol: usize,
     pub bases: Vec<String>,
     pub abstract_class: bool,
     pub line: usize,
@@ -130,9 +134,13 @@ pub(crate) fn unit(source: &str) -> Result<Unit> {
             while cursor < class.close {
                 let start = cursor;
                 while at(&tokens, cursor) == "@" {
-                    cursor += 1;
-                    while identifier(at(&tokens, cursor)) || at(&tokens, cursor) == "." {
-                        cursor += 1;
+                    cursor += 2;
+                    while at(&tokens, cursor) == "." && identifier(at(&tokens, cursor + 1)) {
+                        cursor += 2;
+                    }
+                    let generic = type_end(&tokens, cursor, class.close);
+                    if generic > cursor {
+                        cursor = generic + 1;
                     }
                     if at(&tokens, cursor) == "(" {
                         cursor = tokens[cursor].close.unwrap_or(cursor) + 1;
@@ -142,15 +150,18 @@ pub(crate) fn unit(source: &str) -> Result<Unit> {
                     cursor += 1;
                 }
                 if at(&tokens, cursor) == class.name {
+                    let mut symbol = tokens[cursor].start;
                     let mut open = cursor + 1;
                     let mut name = String::new();
                     if at(&tokens, open) == "." {
                         name = at(&tokens, open + 1).into();
+                        symbol = tokens.get(open + 1).map_or(symbol, |token| token.start);
                         open += 2;
                     }
                     if at(&tokens, open) == "(" {
                         if let Some(close) = tokens[open].close {
                             constructors.push(Constructor {
+                                symbol,
                                 name: name.clone(),
                                 constant: tokens[start..cursor]
                                     .iter()
@@ -191,6 +202,7 @@ pub(crate) fn unit(source: &str) -> Result<Unit> {
             if constructors.is_empty() && !abstract_class {
                 constructors.push(Constructor {
                     name: String::new(),
+                    symbol: tokens[name_index].start,
                     constant: false,
                     factory: false,
                     signature: format!("{}()", class.name),
@@ -198,6 +210,7 @@ pub(crate) fn unit(source: &str) -> Result<Unit> {
             }
             Declaration {
                 name: class.name,
+                symbol: tokens[name_index].start,
                 bases,
                 abstract_class,
                 line: source[..tokens[name_index].start]
