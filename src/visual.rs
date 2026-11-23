@@ -59,7 +59,9 @@ static NAMED_COLOR: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"^Colors\.[A-Za-z0-9_]+$").unwrap());
 static RGB: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(?i)^#[a-f0-9]{6}$").unwrap());
 static SPACING: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"^(?:const\s+)?EdgeInsets\.all\(\s*([0-9]+(?:\.[0-9]+)?)\s*\)$").unwrap()
+    Regex::new(
+        r"^(?:const\s+)?(?P<namespace>[A-Za-z_$][A-Za-z0-9_$]*\.)?EdgeInsets\.all\(\s*(?P<amount>[0-9]+(?:\.[0-9]+)?)\s*\)$",
+    ).unwrap()
 });
 static NUMBER: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"^-?(?:[0-9]+(?:\.[0-9]+)?|\.[0-9]+)$").unwrap());
@@ -422,7 +424,7 @@ fn decode_literal(expression: &str, item: &Field) -> Option<Value> {
             .map(|cap| json!(format!("#{}", cap[1].to_ascii_lowercase()))),
         "spacing" => SPACING
             .captures(expression)?
-            .get(1)?
+            .name("amount")?
             .as_str()
             .parse::<f64>()
             .ok()
@@ -783,8 +785,40 @@ pub fn outline(source: &str) -> Result<Value> {
     outline_in(source, &Scope::default())
 }
 
+fn modifier_children<'a>(tokens: &[Token<'_>], nodes: &'a [Node<'_>]) -> Vec<Option<&'a str>> {
+    let mut counts = vec![0usize; nodes.len()];
+    let mut children = vec![None; nodes.len()];
+    for node in nodes {
+        let Some(index) = node.parent else { continue };
+        counts[index] += 1;
+        let parent = &nodes[index];
+        if (parent.component || crate::modifier_kind::is_modifier(parent.kind))
+            && parent.args.iter().any(|arg| {
+                arg.name == Some("child")
+                    && library::matches_widget(
+                        tokens,
+                        Span {
+                            first: arg.expression,
+                            ..arg.span
+                        },
+                        node,
+                    )
+            })
+        {
+            children[index] = Some(node.id.as_str());
+        }
+    }
+    for (child, count) in children.iter_mut().zip(counts) {
+        if count != 1 {
+            *child = None;
+        }
+    }
+    children
+}
+
 pub(crate) fn outline_in(source: &str, scope: &Scope) -> Result<Value> {
     let (tokens, nodes) = inspect_in(source, scope)?;
+    let modifiers = modifier_children(&tokens, &nodes);
     let mut owners = components::owners(source, &tokens, scope);
     for owner in &mut owners {
         if let Some((start, end)) = owner["buildStart"].as_u64().zip(owner["buildEnd"].as_u64()) {
@@ -802,7 +836,7 @@ pub(crate) fn outline_in(source: &str, scope: &Scope) -> Result<Value> {
     );
     let mut component_types: Vec<_> = component_types.into_iter().collect();
     component_types.sort();
-    let output: Vec<_> = nodes.iter().map(|node| {
+    let output: Vec<_> = nodes.iter().zip(modifiers).map(|(node, modifier)| {
         let properties: Vec<_> = node.spec.fields.iter().map(|item| {
             let context = property(node, item, &tokens);
             let span = context.arg.map(|arg| Span { first: arg.expression, ..arg.span });
@@ -840,6 +874,7 @@ pub(crate) fn outline_in(source: &str, scope: &Scope) -> Result<Value> {
             "symbol":node.symbol,"component":node.component,
             "ownerComponent":owner,
             "parent": parent.map(|parent| &parent.id), "label": label,
+            "modifierChild": modifier, "libraryWrappable": library::can_wrap(&tokens, node),
             "slots": slots, "slotChoices": choices, "properties": properties, "arguments":arguments, "removable": membership.is_some(),
             "movable": membership.as_ref().is_some_and(|entry| entry.list.is_some()),
             "listSlot": membership.as_ref().and_then(|entry| entry.slot), "wrappable": !typed_app_bar, "libraryChildren": !CATALOG.widgets.contains_key(node.kind) || !slots.is_empty() })
@@ -1420,6 +1455,22 @@ pub(crate) fn edit_in(source: &str, command: &Value, scope: &Scope) -> Result<St
                 .ok_or_else(|| Problem::new(400, "This property is unavailable for the widget."))?;
             let context = property(node, item, &tokens);
             let expression = context.arg.map(|arg| arg.expression(&tokens, source));
+            let encode = |previous: Option<&str>| -> Result<String> {
+                let mut value = encode_literal(&command["value"], item)?;
+                if item.kind == "spacing" {
+                    let namespace = previous.map_or_else(
+                        || node.namespace(&tokens),
+                        |expression| {
+                            SPACING
+                                .captures(expression)
+                                .and_then(|captures| captures.name("namespace"))
+                                .map_or_else(String::new, |prefix| prefix.as_str().to_owned())
+                        },
+                    );
+                    value.insert_str("const ".len(), &namespace);
+                }
+                Ok(value)
+            };
             if let Some(branch) = command.get("branch") {
                 let leaf = context
                     .arg
@@ -1429,7 +1480,7 @@ pub(crate) fn edit_in(source: &str, command: &Value, scope: &Scope) -> Result<St
                     .ok_or_else(|| {
                         Problem::new(422, "Select an editable value in a conditional branch.")
                     })?;
-                let value = encode_literal(&command["value"], item)?;
+                let value = encode(Some(leaf.text(&tokens, source)))?;
                 return Ok(replace(
                     source,
                     tokens[leaf.first].start,
@@ -1443,7 +1494,7 @@ pub(crate) fn edit_in(source: &str, command: &Value, scope: &Scope) -> Result<St
                     "Edit this Dart expression in the code editor.",
                 ));
             }
-            let value = encode_literal(&command["value"], item)?;
+            let value = encode(expression)?;
             if let Some(arg) = context.arg {
                 return Ok(replace(
                     source,

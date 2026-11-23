@@ -60,6 +60,23 @@ struct Catalog {
     truncated: bool,
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum Operation {
+    Insert,
+    Wrap,
+}
+
+impl Operation {
+    pub fn from_input(input: &Value) -> Result<Self> {
+        match input["operation"].as_str() {
+            None if input["operation"].is_null() => Ok(Self::Insert),
+            Some("insert") => Ok(Self::Insert),
+            Some("wrap") => Ok(Self::Wrap),
+            _ => Err(Problem::new(400, "Choose insert or wrap.")),
+        }
+    }
+}
+
 fn encoded(path: &str) -> String {
     let mut result = String::new();
     for byte in path.bytes() {
@@ -561,7 +578,45 @@ fn catalog(projects: &Projects, project: &Project, path: &str, refresh: bool) ->
                         package.package.category, package.package.name, file.path
                     );
                     let id = files::revision(&key);
-                    choices.insert(key,Choice {value:json!({"id":id,"name":name,"className":class.name,"constructor":constructor.name,"category":package.package.category,"package":package.package.name,"path":local.clone().unwrap_or_else(||format!("package:{}/{}",package.package.name,file.path)),"projectPath":file.file.strip_prefix(&project.root).ok().map(|path|path.to_string_lossy().replace('\\',"/")),"line":class.line,"revision":file.revision,"signature":constructor.signature.chars().take(360).collect::<String>(),"constant":constructor.constant}),uris:uris.clone(),file:file.file.clone(),revision:file.revision.clone(),local:local.clone()});
+                    let wrapper_hint =
+                        constructor
+                            .signature
+                            .split_once('(')
+                            .is_some_and(|(_, parameters)| {
+                                parameters
+                                    .split(|ch: char| !ch.is_alphanumeric() && ch != '_')
+                                    .any(|token| {
+                                        matches!(token, "child" | "children" | "Widget")
+                                            || names.contains(token)
+                                    })
+                            });
+                    let category = package.package.category;
+                    let path = local.clone().unwrap_or_else(|| {
+                        format!("package:{}/{}", package.package.name, file.path)
+                    });
+                    let project_path = file
+                        .file
+                        .strip_prefix(&project.root)
+                        .ok()
+                        .map(|path| path.to_string_lossy().replace('\\', "/"));
+                    let signature: String = constructor.signature.chars().take(360).collect();
+                    choices.insert(
+                        key,
+                        Choice {
+                            value: json!({
+                                "id": id, "name": name, "className": class.name,
+                                "constructor": constructor.name, "category": category,
+                                "package": package.package.name, "path": path,
+                                "projectPath": project_path, "line": class.line,
+                                "revision": file.revision, "signature": signature,
+                                "constant": constructor.constant, "wrapperHint": wrapper_hint
+                            }),
+                            uris: uris.clone(),
+                            file: file.file.clone(),
+                            revision: file.revision.clone(),
+                            local: local.clone(),
+                        },
+                    );
                 }
             }
         }
@@ -606,6 +661,7 @@ pub fn list(projects: &Projects, project: &Project, input: &Value) -> Result<Val
         .iter()
         .filter(|choice| {
             (category.is_empty() || choice.value["category"] == category)
+                && (input["suggestedWrappers"] != true || choice.value["wrapperHint"] == true)
                 && format!(
                     "{} {} {}",
                     choice.value["name"].as_str().unwrap_or_default(),
@@ -679,6 +735,66 @@ fn target_type(parameter: &Parameter, catalog: &Catalog) -> Option<(String, bool
     (kind == "Widget" || catalog.names.contains(kind)).then(|| (kind.into(), multiple))
 }
 
+fn accepts(catalog: &Catalog, class: &str, expected: &str) -> bool {
+    expected == "Widget"
+        || class == expected
+        || catalog
+            .ancestors
+            .get(class)
+            .is_some_and(|types| types.contains(expected))
+}
+
+fn wrap_target(
+    jobs: &Jobs,
+    project: &Project,
+    input: &Value,
+    file: &files::Source,
+) -> Result<visual::library::WrapTarget> {
+    let scope = visual::Scope::for_source(&jobs.projects, project, &file.path, &file.content);
+    visual::library::wrap_target(&file.content, required(input, "id")?, &scope)
+}
+
+async fn wrapper_type(
+    jobs: &Jobs,
+    project: &Project,
+    file: &files::Source,
+    catalog: &Catalog,
+    target: &visual::library::WrapTarget,
+) -> Option<String> {
+    let parent = target.parent.as_ref()?;
+    let scope = visual::Scope::for_source(&jobs.projects, project, &file.path, &file.content);
+    let (text, offset) =
+        visual::property_completion_in(&file.content, &parent.widget, &scope).ok()?;
+    let resolved = signature(jobs, project, &file.path, &text, offset)
+        .await
+        .ok()?;
+    let parameters = visual::library::parameters(&resolved).ok()?;
+    let param = if let Some(name) = &parent.name {
+        parameters.iter().find(|p| p.named && &p.name == name)
+    } else {
+        parameters.iter().filter(|p| !p.named).nth(parent.position)
+    }?;
+    let (kind, multiple) = target_type(param, catalog)?;
+    (multiple == parent.multiple).then_some(kind)
+}
+
+fn wrapper_slots(parameters: &[Parameter], catalog: &Catalog, child: &str) -> Vec<Value> {
+    let mut slots: Vec<_> = parameters
+        .iter()
+        .filter_map(|parameter| {
+            let (expected, multiple) = target_type(parameter, catalog)?;
+            accepts(catalog, child, &expected)
+                .then(|| json!({"name":parameter.name,"expected":expected,"multiple":multiple}))
+        })
+        .collect();
+    slots.sort_by_key(|slot| match slot["name"].as_str() {
+        Some("child") => 0,
+        Some("children") => 1,
+        _ => 2,
+    });
+    slots
+}
+
 async fn slots(
     jobs: &Jobs,
     project: &Project,
@@ -715,6 +831,7 @@ async fn slots(
 }
 
 pub async fn targets(jobs: &Jobs, project: &Project, input: &Value) -> Result<Value> {
+    let operation = Operation::from_input(input)?;
     let file = source(&jobs.projects, project, input)?;
     let catalog = catalog(
         &jobs.projects,
@@ -722,10 +839,30 @@ pub async fn targets(jobs: &Jobs, project: &Project, input: &Value) -> Result<Va
         &file.path,
         input["refresh"] == true,
     )?;
-    let slots = slots(jobs, project, input, &file, &catalog).await?;
+    let (slots, child, expected) = match operation {
+        Operation::Insert => (
+            slots(jobs, project, input, &file, &catalog).await?,
+            None,
+            None,
+        ),
+        Operation::Wrap => {
+            let target = wrap_target(jobs, project, input, &file)?;
+            let expected = wrapper_type(jobs, project, &file, &catalog, &target).await;
+            (vec![], Some(target.kind), expected)
+        }
+    };
     let entries: Vec<_> = catalog
         .choices
         .iter()
+        .filter(|choice| {
+            expected.as_ref().is_none_or(|expected| {
+                accepts(
+                    &catalog,
+                    choice.value["className"].as_str().unwrap_or_default(),
+                    expected,
+                )
+            })
+        })
         .map(|choice| {
             let mut entry = choice.value.clone();
             let name = entry["className"].as_str().unwrap_or_default();
@@ -745,7 +882,10 @@ pub async fn targets(jobs: &Jobs, project: &Project, input: &Value) -> Result<Va
         })
         .collect();
     source(&jobs.projects, project, input)?;
-    Ok(json!({"slots":slots,"entries":entries,"truncated":catalog.truncated}))
+    Ok(json!({
+        "slots":slots, "entries":entries, "truncated":catalog.truncated,
+        "childType": child, "wrapperType": expected
+    }))
 }
 
 fn choice(catalog: &Catalog, input: &Value) -> Result<Choice> {
@@ -811,6 +951,9 @@ fn default_argument(parameter: &Parameter) -> Value {
         | "Alignment"
         | "AlignmentGeometry"
         | "BoxConstraints"
+        | "Size"
+        | "Offset"
+        | "Matrix4"
         | "TextStyle"
         | "BorderRadius"
         | "BorderRadiusGeometry"
@@ -862,8 +1005,9 @@ async fn options(jobs: &Jobs, project: &Project, input: &Value) -> Result<Option
 }
 
 pub async fn configure(jobs: &Jobs, project: &Project, input: &Value) -> Result<Value> {
+    let operation = Operation::from_input(input)?;
     let options = options(jobs, project, input).await?;
-    let slots = slots(jobs, project, input, &options.file, &options.catalog).await?;
+    let slots = available_slots(jobs, project, input, &options, operation).await?;
     source(&jobs.projects, project, input)?;
     current_choice(&options.choice)?;
     let parameters: Vec<_> = options
@@ -879,9 +1023,41 @@ pub async fn configure(jobs: &Jobs, project: &Project, input: &Value) -> Result<
             value
         })
         .collect();
-    Ok(
-        json!({"entry":options.choice.value,"signature":options.signature["label"],"signatureRevision":files::revision(serde_json::to_vec(&options.parameters)?),"parameters":parameters,"slots":slots}),
-    )
+    Ok(json!({
+        "entry":options.choice.value, "signature":options.signature["label"],
+        "signatureRevision":signature_revision(&options.parameters)?,
+        "parameters":parameters, "slots":slots
+    }))
+}
+
+fn signature_revision(parameters: &[Parameter]) -> Result<String> {
+    Ok(files::revision(serde_json::to_vec(parameters)?))
+}
+
+async fn available_slots(
+    jobs: &Jobs,
+    project: &Project,
+    input: &Value,
+    options: &Options,
+    operation: Operation,
+) -> Result<Vec<Value>> {
+    match operation {
+        Operation::Insert => slots(jobs, project, input, &options.file, &options.catalog).await,
+        Operation::Wrap => {
+            let target = wrap_target(jobs, project, input, &options.file)?;
+            let slots = wrapper_slots(&options.parameters, &options.catalog, &target.kind);
+            if slots.is_empty() {
+                return Err(Problem::new(
+                    422,
+                    format!(
+                        "This constructor has no parameter that accepts {}. Choose another wrapper.",
+                        target.kind
+                    ),
+                ));
+            }
+            Ok(slots)
+        }
+    }
 }
 
 fn default_code(parameter: &Parameter, namespace: &str) -> Option<String> {
@@ -900,6 +1076,9 @@ fn default_code(parameter: &Parameter, namespace: &str) -> Option<String> {
         "EdgeInsets" | "EdgeInsetsGeometry" => format!("{namespace}EdgeInsets.all(16)"),
         "Alignment" | "AlignmentGeometry" => format!("{namespace}Alignment.center"),
         "BoxConstraints" => format!("{namespace}BoxConstraints()"),
+        "Size" => format!("{namespace}Size.fromHeight(56)"),
+        "Offset" => format!("{namespace}Offset.zero"),
+        "Matrix4" => format!("{namespace}Matrix4.identity()"),
         "TextStyle" => format!("{namespace}TextStyle()"),
         "BorderRadius" | "BorderRadiusGeometry" => format!("{namespace}BorderRadius.zero"),
         "Color" => format!("{namespace}Color(0xff6750a4)"),
@@ -980,41 +1159,51 @@ struct Prepared {
     content: String,
     selected: String,
 }
-async fn prepare(jobs: &Jobs, project: &Project, input: &Value) -> Result<Prepared> {
+async fn prepare(
+    jobs: &Jobs,
+    project: &Project,
+    input: &Value,
+    operation: Operation,
+) -> Result<Prepared> {
     let options = options(jobs, project, input).await?;
-    if input["signatureRevision"] != files::revision(serde_json::to_vec(&options.parameters)?) {
+    if input["signatureRevision"] != signature_revision(&options.parameters)? {
         return Err(Problem::new(
             409,
             "The constructor parameters changed. Choose the widget again.",
         ));
     }
-    let catalog = &options.catalog;
-    let available = slots(jobs, project, input, &options.file, &catalog).await?;
+    let available = available_slots(jobs, project, input, &options, operation).await?;
+    let slot = required(input, "slot")?;
     let target = available
         .iter()
-        .find(|slot| slot["name"] == input["slot"])
+        .find(|target| target["name"] == slot)
         .ok_or_else(|| {
             Problem::new(
                 409,
-                "This slot is not available. Select the parent widget again.",
+                "This child parameter is no longer available. Configure the widget again.",
             )
         })?;
-    let class = required(&options.choice.value, "className")?;
-    let expected = required(target, "expected")?;
-    if expected != "Widget"
-        && class != expected
-        && !catalog
-            .ancestors
-            .get(class)
-            .is_some_and(|types| types.contains(expected))
-    {
-        return Err(Problem::new(
-            422,
-            format!("This slot requires a {expected}. Choose a compatible widget."),
-        ));
+    let multiple = target["multiple"] == true;
+    if operation == Operation::Insert {
+        let class = required(&options.choice.value, "className")?;
+        let expected = required(target, "expected")?;
+        if !accepts(&options.catalog, class, expected) {
+            return Err(Problem::new(
+                422,
+                format!("This slot requires a {expected}. Choose a compatible widget."),
+            ));
+        }
     }
+    let child = (operation == Operation::Wrap)
+        .then(|| format!("_freeflowChild{}", uuid::Uuid::new_v4().simple()));
     let (mut text, callee, mut shift) = import_choice(&options.file, &options.choice)?;
     let arguments = input["arguments"].as_object();
+    if child.is_some() && arguments.is_some_and(|arguments| arguments.contains_key(slot)) {
+        return Err(Problem::new(
+            400,
+            "The wrapper's selected child parameter is filled by the original widget.",
+        ));
+    }
     if arguments.is_some_and(|arguments| {
         arguments.keys().any(|name| {
             !options
@@ -1032,10 +1221,19 @@ async fn prepare(jobs: &Jobs, project: &Project, input: &Value) -> Result<Prepar
         .parameters
         .iter()
         .map(|parameter| {
-            arguments
-                .and_then(|arguments| arguments.get(&parameter.name))
-                .cloned()
-                .unwrap_or_else(|| default_argument(parameter))
+            if let Some(child) = child.as_ref().filter(|_| parameter.name == slot) {
+                let value = if multiple {
+                    format!("[{child}]")
+                } else {
+                    child.clone()
+                };
+                json!({"mode":"dart","value":value})
+            } else {
+                arguments
+                    .and_then(|arguments| arguments.get(&parameter.name))
+                    .cloned()
+                    .unwrap_or_else(|| default_argument(parameter))
+            }
         })
         .collect();
     let needs_framework = values
@@ -1092,15 +1290,19 @@ async fn prepare(jobs: &Jobs, project: &Project, input: &Value) -> Result<Prepar
         .ok_or_else(|| Problem::new(400, "Select a source widget."))?
         .to_string();
     let scope = visual::Scope::for_source(&jobs.projects, project, &options.file.path, &text);
-    let (content, selected) = visual::library::insert(
-        &text,
-        &id,
-        required(target, "name")?,
-        target["multiple"] == true,
-        target["position"].as_u64().map(|value| value as usize),
-        &expression,
-        &scope,
-    )?;
+    let (content, selected) = if let Some(child) = child {
+        visual::library::wrap(&text, &id, &expression, &child, &scope)?
+    } else {
+        visual::library::insert(
+            &text,
+            &id,
+            slot,
+            multiple,
+            target["position"].as_u64().map(|value| value as usize),
+            &expression,
+            &scope,
+        )?
+    };
     Ok(Prepared {
         file: options.file,
         choice: options.choice,
@@ -1109,11 +1311,28 @@ async fn prepare(jobs: &Jobs, project: &Project, input: &Value) -> Result<Prepar
     })
 }
 
-pub async fn insert(jobs: &Jobs, project: &Project, input: &Value, save: bool) -> Result<Value> {
-    let prepared = prepare(jobs, project, input).await?;
-    let diagnostics=jobs.analyzers.saved_editor(jobs,project,&json!({"action":"diagnose","path":prepared.file.path,"text":prepared.content,"offset":0})).await?;
+pub async fn apply(
+    jobs: &Jobs,
+    project: &Project,
+    input: &Value,
+    operation: Operation,
+    save: bool,
+) -> Result<Value> {
+    if !input["operation"].is_null() && Operation::from_input(input)? != operation {
+        return Err(Problem::new(
+            400,
+            "The selected operation does not match this action.",
+        ));
+    }
+    let prepared = prepare(jobs, project, input, operation).await?;
+    let diagnostics = jobs.analyzers.saved_editor(
+        jobs,
+        project,
+        &json!({"action":"diagnose","path":prepared.file.path,"text":prepared.content,"offset":0}),
+    ).await?;
     if !save {
         source(&jobs.projects, project, input)?;
+        current_choice(&prepared.choice)?;
         return Ok(diagnostics);
     }
     let errors: Vec<_> = diagnostics["diagnostics"]

@@ -54,6 +54,7 @@ pub fn writing(route: &str, method: &str) -> Option<(String, u64)> {
                     | "theme-values"
                     | "theme-binding"
                     | "widget-library-insert"
+                    | "widget-library-wrap"
             )
     ) {
         return None;

@@ -113,11 +113,13 @@ pub(crate) enum View {
     },
     WidgetLibrary {
         context: crate::property_panel::Context,
-        catalog: Value,
+        operation: crate::widget_library::Operation,
+        catalog: std::rc::Rc<Value>,
     },
     WidgetConstructor {
         context: crate::property_panel::Context,
-        catalog: Value,
+        operation: crate::widget_library::Operation,
+        catalog: std::rc::Rc<Value>,
         config: Value,
         slot: String,
     },
@@ -1099,10 +1101,11 @@ async fn submit_view(view: View, version: u64, mut input: Value) -> Result {
     match view {
         View::WidgetConstructor {
             context,
+            operation,
             config,
             slot,
             ..
-        } => crate::widget_library::save(&context, &config, &slot, version).await?,
+        } => crate::widget_library::save(&context, operation, &config, &slot, version).await?,
         View::DesignValue {
             project,
             generation,
@@ -1203,17 +1206,25 @@ async fn submit_view(view: View, version: u64, mut input: Value) -> Result {
 
 async fn act(view: View, version: u64, action: &str, element: &Element) -> Result {
     match view {
-        View::WidgetLibrary { context, catalog } => {
-            crate::widget_library::act(&context, &catalog, version, action, element).await?
+        View::WidgetLibrary {
+            context,
+            operation,
+            catalog,
+        } => {
+            crate::widget_library::act(&context, operation, catalog, version, action, element)
+                .await?
         }
         View::WidgetConstructor {
             context,
+            operation,
             catalog,
             config,
             slot,
         } => {
-            crate::widget_library::value_action(&context, &catalog, &config, &slot, version, action)
-                .await?
+            crate::widget_library::value_action(
+                &context, operation, catalog, &config, &slot, version, action,
+            )
+            .await?
         }
         View::DesignValues {
             project,

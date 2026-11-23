@@ -100,9 +100,12 @@ pub fn explorer(state: &State) {
         "tree-mode",
         !open || !state.widgets || !state.mode.shows_preview(),
     );
+    hidden("tree-detail", !open || !state.widgets);
     for (name, active) in [
         ("source-widgets", !rendered),
         ("rendered-widgets", rendered),
+        ("detailed-widgets", !state.simplified_widgets),
+        ("simplified-widgets", state.simplified_widgets),
     ] {
         let button = id(name);
         toggle(&button, "active", active);
@@ -189,7 +192,12 @@ fn widget_rows(
     if depth > 100 {
         return;
     }
-    for node in groups.get(parent).into_iter().flatten() {
+    for original in groups.get(parent).into_iter().flatten() {
+        let node = if state.simplified_widgets {
+            visible_widget(state, groups, original, rendered)
+        } else {
+            original
+        };
         let id = string(&node["id"]);
         let kind = string(&node["type"]);
         let selected = if rendered {
@@ -247,12 +255,50 @@ fn widget_rows(
         } else {
             kind.to_owned()
         };
-        output.push_str(&format!(r#"<button type="button" class="tree-row{}{}" {attribute}="{}" style="--depth:{}" draggable="{}" aria-pressed="{selected}" title="{title}">{chevron}<span class="tree-symbol">{}</span><span class="tree-label ellipsis">{}</span>{hint}</button>"#,
-            if selected { " selected" } else { "" }, if component { " component-row" } else { "" }, h(id), depth.min(10), !rendered && node["removable"] == true, icon(if component { "component" } else { widget_icon(kind) }, 16), h(&caption)));
+        let placement = if rendered {
+            String::new()
+        } else {
+            format!(r#" data-widget-placement="{}""#, h(string(&original["id"])))
+        };
+        output.push_str(&format!(r#"<button type="button" class="tree-row{}{}" {attribute}="{}"{placement} style="--depth:{}" draggable="{}" aria-pressed="{selected}" title="{title}">{chevron}<span class="tree-symbol">{}</span><span class="tree-label ellipsis">{}</span>{hint}</button>"#,
+            if selected { " selected" } else { "" }, if component { " component-row" } else { "" }, h(id), depth.min(10), !rendered && original["removable"] == true, icon(if component { "component" } else { widget_icon(kind) }, 16), h(&caption)));
         if children && !collapsed {
             widget_rows(state, groups, id, depth + 1, rendered, output);
         }
     }
+}
+
+fn visible_widget<'a>(
+    state: &State,
+    groups: &HashMap<&str, Vec<&'a Value>>,
+    mut node: &'a Value,
+    rendered: bool,
+) -> &'a Value {
+    let selected = if rendered {
+        &state.rendered.selected
+    } else {
+        &state.widget
+    };
+    for _ in 0..100 {
+        let id = string(&node["id"]);
+        let kind = string(&node["type"]);
+        if id == selected
+            || node["component"] == true
+            || node["ownerComponent"]["widget"] == id
+            || !crate::modifier_kind::is_modifier(kind)
+            || rendered && state.rendered.truncated
+        {
+            break;
+        }
+        let Some([child]) = groups.get(id).map(Vec::as_slice) else {
+            break;
+        };
+        if !rendered && node["modifierChild"] != child["id"] {
+            break;
+        }
+        node = child;
+    }
+    node
 }
 
 fn file_rows(
@@ -427,6 +473,54 @@ fn property_input(item: &Value, field: &Value, label: &str, branch: &str) -> Str
     )
 }
 
+fn modifiers(state: &State, selected: &Value) -> String {
+    let mut base = selected;
+    for _ in 0..100 {
+        let Some(child) = base["modifierChild"].as_str().and_then(|id| state.node(id)) else {
+            break;
+        };
+        base = child;
+    }
+    let mut chain = vec![];
+    let mut node = base;
+    for _ in 0..100 {
+        let Some(parent) = node["parent"].as_str().and_then(|id| state.node(id)) else {
+            break;
+        };
+        if parent["modifierChild"] != node["id"] {
+            break;
+        }
+        chain.push(parent);
+        node = parent;
+    }
+    let choices: String = if chain.is_empty() {
+        String::new()
+    } else {
+        std::iter::once(base).chain(chain).map(|node| {
+            let active = node["id"] == selected["id"];
+            let kind = string(&node["type"]);
+            format!(
+                r#"<button type="button" class="button soft small modifier-choice" data-modifier-select="{}" aria-pressed="{active}" title="Edit {} properties">{}</button>"#,
+                h(string(&node["id"])), h(kind), h(kind)
+            )
+        }).collect()
+    };
+    let add = if selected["libraryWrappable"] != false {
+        format!(
+            r#"<button type="button" data-widget-action="wrap" class="button outline small" title="Wrap this widget">{}Add modifier</button>"#,
+            icon("plus", 14)
+        )
+    } else {
+        String::new()
+    };
+    if add.is_empty() && choices.is_empty() {
+        return String::new();
+    }
+    format!(
+        r#"<section class="inspect-group modifiers" aria-label="Modifiers"><div class="modifiers-heading"><h3>Modifiers</h3>{add}</div><div class="modifier-choices">{choices}</div></section>"#
+    )
+}
+
 pub fn inspector(state: &State) {
     crate::agent_panel::context(state);
     let rendered = state.showing_rendered_widgets();
@@ -452,18 +546,12 @@ pub fn inspector(state: &State) {
     let kind = string(&node["type"]);
     let properties: String = items(&node["properties"]).iter().map(property).collect();
     let mut content = format!(
-        r#"<div class="inspect-title"><div class="inspect-widget">{}{}</div><div class="inspect-code">{} · {}</div><div class="inspect-actions"><button type="button" data-widget-action="code" class="button soft small">{}Code</button><button type="button" data-widget-action="wrap" class="button soft small"{}>{}Wrap</button>"#,
+        r#"<div class="inspect-title"><div class="inspect-widget">{}{}</div><div class="inspect-code">{} · {}</div><div class="inspect-actions"><button type="button" data-widget-action="code" class="button soft small">{}Code</button>"#,
         icon(widget_icon(kind), 18),
         h(kind),
         h(string(&state.visual["path"])),
         node["line"],
-        icon("code", 16),
-        if node["wrappable"] == false {
-            " disabled"
-        } else {
-            ""
-        },
-        icon("wrap", 16)
+        icon("code", 16)
     );
     if node["movable"] == true {
         let siblings = state.siblings(node);
@@ -482,6 +570,7 @@ pub fn inspector(state: &State) {
     content.push_str("</div></div>");
     content.push_str(&crate::widget_clipboard::controls(node, false));
     content.push_str(&crate::component_panel::controls(node, false));
+    content.push_str(&modifiers(state, node));
     content.push_str(&format!(r#"<div class="property-toolbar"><input id="property-search" type="search" aria-label="Search properties" placeholder="Search properties…" value="{}"><button type="button" class="button outline small" data-property-code="">{}Add property</button></div>"#, h(&crate::property_panel::search()), icon("plus", 14)));
     if rendered {
         content.push_str(r#"<p class="inspect-note">Edits apply to every instance created by this Dart constructor.</p>"#);

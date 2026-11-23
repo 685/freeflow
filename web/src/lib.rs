@@ -7,6 +7,8 @@ mod dialogs;
 mod dom;
 mod editor;
 mod editor_assist;
+#[path = "../../src/modifier_kind.rs"]
+mod modifier_kind;
 mod phone_preview;
 mod planner;
 mod preview_canvas;
@@ -94,6 +96,7 @@ pub async fn activate(project: Value) -> Result {
             drafts: std::mem::take(&mut state.drafts),
             device: state.device.clone(),
             canvas: state.canvas.clone(),
+            simplified_widgets: state.simplified_widgets,
             generation: state.generation,
             project,
             ..Default::default()
@@ -805,6 +808,20 @@ fn register_events() {
     }
     ui::click("source-widgets", || preview_inspector::show_tree(false));
     ui::click("rendered-widgets", || preview_inspector::show_tree(true));
+    for (button, simplified) in [("detailed-widgets", false), ("simplified-widgets", true)] {
+        ui::click(button, move || {
+            if let Ok(Some(storage)) = ui::win().local_storage() {
+                let _ = storage.set_item(
+                    "freeflow-tree-detail",
+                    if simplified { "simplified" } else { "detailed" },
+                );
+            }
+            state::change(|state| {
+                state.simplified_widgets = simplified;
+                view::explorer(state);
+            });
+        });
+    }
     ui::listen(&id("source-select"), "change", |event| {
         if let Some(element) = target(&event) {
             let mode = state::read(|state| {
@@ -887,8 +904,8 @@ fn tree_events() {
         }
     });
     ui::listen(&tree, "dragstart", |event| {
-        let Some(widget) =
-            closest(&event, "[data-widget]").and_then(|node| node.get_attribute("data-widget"))
+        let Some(widget) = closest(&event, "[data-widget-placement]")
+            .and_then(|node| node.get_attribute("data-widget-placement"))
         else {
             return;
         };
@@ -954,30 +971,32 @@ fn clear_drop() {
 fn drop_target(event: &DragEvent) -> Option<(Element, String, &'static str)> {
     let button = closest(event, "[data-widget]")?;
     let widget = button.get_attribute("data-widget")?;
-    let side = state::read(|state| {
-        let Some((from, to)) = state.dragged.as_ref().zip(state.node(&widget)) else {
+    let placement = button.get_attribute("data-widget-placement")?;
+    let (target, side) = state::read(|state| {
+        let from = state.dragged.as_ref()?;
+        let visible = state.node(&widget)?;
+        let placement = state.node(&placement)?;
+        let rect = button.get_bounding_client_rect();
+        let position = (f64::from(event.client_y()) - rect.top()) / rect.height();
+        let (target, side) = if !items(&visible["slots"]).is_empty()
+            && (placement["movable"] != true || (0.25..=0.75).contains(&position))
+        {
+            (visible, "inside")
+        } else if placement["movable"] == true {
+            (placement, if position < 0.5 { "before" } else { "after" })
+        } else {
             return None;
         };
-        let mut ancestor = Some(to);
+        let mut ancestor = Some(target);
         while let Some(node) = ancestor {
             if node["id"] == from["id"] {
                 return None;
             }
             ancestor = node["parent"].as_str().and_then(|id| state.node(id));
         }
-        let rect = button.get_bounding_client_rect();
-        let position = (f64::from(event.client_y()) - rect.top()) / rect.height();
-        if !items(&to["slots"]).is_empty()
-            && (to["movable"] != true || (0.25..=0.75).contains(&position))
-        {
-            Some("inside")
-        } else if to["movable"] == true {
-            Some(if position < 0.5 { "before" } else { "after" })
-        } else {
-            None
-        }
-    });
-    Some((button, widget, side?))
+        Some((string(&target["id"]).to_owned(), side))
+    })?;
+    Some((button, target, side))
 }
 
 fn inspector_events() {
@@ -1030,6 +1049,35 @@ fn inspector_events() {
         let Some(button) = closest(&event, "button") else {
             return;
         };
+        if let Some(widget) = button.get_attribute("data-modifier-select") {
+            let showing_rendered = state::change(|state| {
+                if state.node(&widget).is_none() {
+                    return false;
+                }
+                state.widget = widget;
+                state.reveal_source_widget();
+                if state.showing_rendered_widgets() {
+                    true
+                } else {
+                    view::explorer(state);
+                    view::inspector(state);
+                    false
+                }
+            });
+            if showing_rendered {
+                preview_inspector::show_tree(false);
+            }
+            let selector = format!(
+                r#"[data-modifier-select="{}"]"#,
+                state::read(|state| state.widget.clone())
+            );
+            if let Some(button) =
+                ui::find(&selector).and_then(|node| node.dyn_into::<web_sys::HtmlElement>().ok())
+            {
+                let _ = button.focus();
+            }
+            return;
+        }
         let Some(node) = state::read(|state| state.widget().cloned()) else {
             return;
         };
@@ -1062,8 +1110,8 @@ fn inspector_events() {
                     Ok(())
                 });
             }
-            Some("wrap") => dialogs::wrap(node),
-            Some("library") => ui::spawn(widget_library::open()),
+            Some("wrap") => ui::spawn(widget_library::open(widget_library::Operation::Wrap)),
+            Some("library") => ui::spawn(widget_library::open(widget_library::Operation::Insert)),
             Some("remove") => ui::spawn(visual_edit(json!({"id":node["id"],"operation":"remove"}))),
             Some("add") => ui::spawn(visual_edit(json!({"id":node["id"],"operation":"add",
                 "slot":ui::value(&id("insert-slot")),"widget":ui::value(&id("insert-widget"))}))),
@@ -1093,6 +1141,15 @@ fn start() -> std::result::Result<(), JsValue> {
     widget_clipboard::initialize();
     saved_edits::initialize();
     preview_canvas::initialize();
+    state::change(|state| {
+        state.simplified_widgets = ui::win()
+            .local_storage()
+            .ok()
+            .flatten()
+            .and_then(|storage| storage.get_item("freeflow-tree-detail").ok().flatten())
+            .as_deref()
+            == Some("simplified");
+    });
     agent_panel::initialize();
     property_panel::initialize();
     component_panel::initialize();

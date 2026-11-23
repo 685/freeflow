@@ -324,17 +324,7 @@ async fn pick(
         let found = state.visual["revision"] == hit["revision"] && state.node(widget).is_some();
         if found {
             state.widget = widget.to_owned();
-            let mut parent = state
-                .node(widget)
-                .and_then(|node| node["parent"].as_str())
-                .map(str::to_owned);
-            while let Some(id) = parent {
-                state.collapsed.remove(&id);
-                parent = state
-                    .node(&id)
-                    .and_then(|node| node["parent"].as_str())
-                    .map(str::to_owned);
-            }
+            state.reveal_source_widget();
         }
         let selector = if state.showing_rendered_widgets()
             && state

@@ -13,6 +13,7 @@ mod inspector;
 mod jobs;
 mod language;
 mod mcp;
+mod modifier_kind;
 mod phone_preview;
 mod preview;
 mod processes;

@@ -400,6 +400,10 @@
             "Dependencies"
           ]
         },
+        "suggestedWrappers": {
+          "type": "boolean",
+          "description": "Filter to likely wrappers. Resolve their child parameters with widget_insert_options and operation wrap."
+        },
         "limit": {
           "type": "integer",
           "minimum": 1,
@@ -418,7 +422,7 @@
   },
   {
     "name": "widget_insert_options",
-    "description": "Read resolved constructor parameters, suggested values and available child slots. Call before insert_widget. Does not save source.",
+    "description": "Read resolved constructor parameters, suggested values and available child slots. Call before insert_widget or wrap_widget. Does not save source.",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -435,7 +439,11 @@
         },
         "id": {
           "type": "string",
-          "description": "Parent widget ID from inspect_widgets."
+          "description": "Parent widget to insert into, or original widget to wrap, from inspect_widgets."
+        },
+        "operation": {
+          "enum": ["insert", "wrap"],
+          "description": "Defaults to insert. Use wrap to resolve child parameters for the wrapper."
         },
         "entryId": {
           "type": "string",
@@ -516,6 +524,33 @@
       "readOnlyHint": false,
       "openWorldHint": false
     }
+  },
+  {
+    "name": "wrap_widget",
+    "description": "Wrap a source widget with a Flutter, project or dependency constructor. First call widget_insert_options with operation wrap. Dart checks the new file and the wrapper and import undo together.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "type": "string",
+          "description": "Project ID from list_projects. Omit for a project-scoped connection."
+        },
+        "path": {"type": "string", "description": "Dart file containing the widget."},
+        "revision": {"type": "string", "description": "Current source revision from inspect_widgets."},
+        "id": {"type": "string", "description": "Original widget ID from inspect_widgets."},
+        "entryId": {"type": "string", "description": "Wrapper constructor ID from list_widget_catalog."},
+        "entryRevision": {"type": "string", "description": "Wrapper source revision from list_widget_catalog."},
+        "signatureRevision": {"type": "string", "description": "Parameter revision from widget_insert_options."},
+        "slot": {"type": "string", "description": "Wrapper parameter which receives the original widget."},
+        "arguments": {
+          "type": "object",
+          "description": "Remaining parameters mapped to {mode,value} as in insert_widget. Omit the slot parameter, which receives the original widget."
+        }
+      },
+      "required": ["path", "revision", "id", "entryId", "entryRevision", "signatureRevision", "slot"],
+      "additionalProperties": false
+    },
+    "annotations": {"readOnlyHint": false, "openWorldHint": false}
   },
   {
     "name": "start_preview",

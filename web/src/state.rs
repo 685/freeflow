@@ -75,6 +75,7 @@ pub struct State {
     pub tree: Vec<Value>,
     pub visual: Value,
     pub rendered: RenderedWidgets,
+    pub simplified_widgets: bool,
     pub widget: String,
     pub folders: HashSet<String>,
     pub collapsed: HashSet<String>,
@@ -128,6 +129,7 @@ impl Default for State {
             tree: vec![],
             visual: Value::Null,
             rendered: RenderedWidgets::default(),
+            simplified_widgets: false,
             widget: String::new(),
             folders: ["lib".into(), "assets".into()].into(),
             collapsed: HashSet::new(),
@@ -185,6 +187,20 @@ impl State {
     }
     pub fn widget(&self) -> Option<&Value> {
         self.node(&self.widget)
+    }
+    pub fn reveal_source_widget(&mut self) {
+        let mut parent = self
+            .node(&self.widget)
+            .and_then(|node| node["parent"].as_str())
+            .map(str::to_owned);
+        for _ in 0..100 {
+            let Some(id) = parent else { break };
+            self.collapsed.remove(&id);
+            parent = self
+                .node(&id)
+                .and_then(|node| node["parent"].as_str())
+                .map(str::to_owned);
+        }
     }
     pub fn siblings(&self, node: &Value) -> Vec<&Value> {
         items(&self.visual["nodes"])

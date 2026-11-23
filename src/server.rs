@@ -551,7 +551,7 @@ async fn project_route(
             "widget-library" => crate::widget_library::list(
                 projects,
                 &project,
-                &json!({"path":file,"query":query(url,"query"),"category":query(url,"category"),"refresh":query(url,"refresh")=="true"}),
+                &json!({"path":file,"query":query(url,"query"),"category":query(url,"category"),"refresh":query(url,"refresh")=="true","suggestedWrappers":query(url,"suggestedWrappers")=="true"}),
             )?,
             "theme-value" => design_values::read(
                 projects,
@@ -706,12 +706,24 @@ async fn project_route(
             ),
             "widget-library-check" => (
                 200,
-                crate::widget_library::insert(jobs, &project, &input, false).await?,
+                crate::widget_library::apply(
+                    jobs,
+                    &project,
+                    &input,
+                    crate::widget_library::Operation::from_input(&input)?,
+                    false,
+                )
+                .await?,
             ),
-            "widget-library-insert" => (
-                200,
-                crate::widget_library::insert(jobs, &project, &input, true).await?,
-            ),
+            "widget-library-insert" | "widget-library-wrap" => {
+                use crate::widget_library::{Operation, apply};
+                let operation = if part == "widget-library-wrap" {
+                    Operation::Wrap
+                } else {
+                    Operation::Insert
+                };
+                (200, apply(jobs, &project, &input, operation, true).await?)
+            }
             "inspect" => (200, inspector::resolve(projects, &project, &input)?),
             "editor" => (200, jobs.analyzers.editor(jobs, &project, &input).await?),
             "git" => (202, git::operation(jobs, project, &input)?),

@@ -386,7 +386,7 @@ pub(crate) fn insert(
     } else {
         node.args.iter().copied().find(|arg| arg.name == Some(slot))
     };
-    let mut result = match argument {
+    let result = match argument {
         None => {
             let value = if multiple {
                 format!("[{value}]")
@@ -447,7 +447,125 @@ pub(crate) fn insert(
             ));
         }
     };
-    let point = result.find(&marker).unwrap();
+    finish_edit(result, &marker)
+}
+
+pub(crate) struct WrapTarget {
+    pub kind: String,
+    pub parent: Option<ParentArgument>,
+}
+
+pub(crate) struct ParentArgument {
+    pub widget: String,
+    pub name: Option<String>,
+    pub position: usize,
+    pub multiple: bool,
+}
+
+pub(super) fn matches_widget(tokens: &[Token<'_>], span: Span, node: &Node<'_>) -> bool {
+    let span = enclosed(tokens, span);
+    span.first == node.start && span.last == node.close
+}
+
+pub(super) fn can_wrap(tokens: &[Token<'_>], node: &Node<'_>) -> bool {
+    let mut after = node.close + 1;
+    while at(tokens, after) == ")" {
+        // Skip a pair of parentheses only if it encloses just this expression.
+        let before = node.start.checked_sub(after - node.close);
+        if before.is_none_or(|index| {
+            let prior = index.checked_sub(1).map_or("", |prior| at(tokens, prior));
+            let grouping = matches!(
+                prior,
+                "" | "(" | "[" | "," | ":" | "=" | "?" | "return" | "throw" | "yield"
+            ) || prior == ">" && index >= 2 && at(tokens, index - 2) == "=";
+            at(tokens, index) != "(" || tokens[index].close != Some(after) || !grouping
+        }) {
+            break;
+        }
+        after += 1;
+    }
+    !matches!(at(tokens, after), "." | "[" | "(" | "!" | "as" | "is")
+        && !(at(tokens, after) == "?" && matches!(at(tokens, after + 1), "." | "["))
+}
+
+fn selected_node<'a, 'b>(nodes: &'b [Node<'a>], id: &str) -> Result<&'b Node<'a>> {
+    nodes
+        .iter()
+        .find(|node| node.id == id)
+        .ok_or_else(|| Problem::new(409, "Select the widget again."))
+}
+
+fn wrap_node<'a, 'b>(
+    tokens: &[Token<'_>],
+    nodes: &'b [Node<'a>],
+    id: &str,
+) -> Result<&'b Node<'a>> {
+    let node = selected_node(nodes, id)?;
+    if !can_wrap(tokens, node) {
+        return Err(Problem::new(
+            422,
+            "This constructor has an attached Dart expression. Wrap it in Code.",
+        ));
+    }
+    Ok(node)
+}
+
+pub(crate) fn wrap_target(source: &str, id: &str, scope: &Scope) -> Result<WrapTarget> {
+    let (tokens, nodes) = inspect_in(source, scope)?;
+    let node = wrap_node(&tokens, &nodes, id)?;
+    let parent = node.parent.and_then(|index| {
+        let parent = &nodes[index];
+        let mut position = 0;
+        for arg in &parent.args {
+            let span = Span {
+                first: arg.expression,
+                ..arg.span
+            };
+            let multiple = list_for(&tokens, *arg).is_some_and(|list| {
+                list.items
+                    .into_iter()
+                    .any(|span| matches_widget(&tokens, span, node))
+            });
+            if multiple || matches_widget(&tokens, span, node) {
+                return Some(ParentArgument {
+                    widget: parent.id.clone(),
+                    name: arg.name.map(str::to_owned),
+                    position,
+                    multiple,
+                });
+            }
+            position += usize::from(arg.name.is_none());
+        }
+        None
+    });
+    Ok(WrapTarget {
+        kind: node.kind.to_owned(),
+        parent,
+    })
+}
+
+pub(crate) fn wrap(
+    source: &str,
+    id: &str,
+    template: &str,
+    child: &str,
+    scope: &Scope,
+) -> Result<(String, String)> {
+    let template = checked_expression(template)?;
+    let (tokens, nodes) = inspect_in(source, scope)?;
+    let node = wrap_node(&tokens, &nodes, id)?;
+    let (before, after) = template
+        .split_once(child)
+        .ok_or_else(|| Problem::new(422, "Choose a child parameter for the wrapper."))?;
+    let start = tokens[node.start].start;
+    let end = tokens[node.close].end;
+    let marker = format!("/*freeflow-wrap-{}*/", uuid::Uuid::new_v4());
+    let value = format!("{marker}{before}{}{after}", &source[start..end]);
+    finish_edit(replace(source, start, end, &value), &marker)
+}
+
+fn finish_edit(mut result: String, marker: &str) -> Result<(String, String)> {
+    let point = result.find(marker).unwrap();
     let tokens = tokenize(&result)?;
     let mut edits = vec![];
     for (index, token) in tokens
@@ -459,15 +577,16 @@ pub(crate) fn insert(
         if at(&tokens, cursor) == "<" {
             cursor = type_end(&tokens, cursor, tokens.len()) + 1;
         }
-        if identifier(at(&tokens, cursor)) {
+        while identifier(at(&tokens, cursor)) {
             cursor += 1;
             let end = type_end(&tokens, cursor, tokens.len());
             if end > cursor {
                 cursor = end + 1;
             }
-            while at(&tokens, cursor) == "." && identifier(at(&tokens, cursor + 1)) {
-                cursor += 2;
+            if at(&tokens, cursor) != "." || !identifier(at(&tokens, cursor + 1)) {
+                break;
             }
+            cursor += 1;
         }
         if matches!(at(&tokens, cursor), "(" | "[" | "{")
             && tokens
@@ -486,7 +605,7 @@ pub(crate) fn insert(
     for (start, end) in edits.into_iter().rev() {
         result.replace_range(start..end, "");
     }
-    let point = result.find(&marker).unwrap();
+    let point = result.find(marker).unwrap();
     result.replace_range(point..point + marker.len(), "");
     let selected = result[..point].encode_utf16().count().to_string();
     Ok((result, selected))
@@ -555,6 +674,97 @@ mod tests {
             .find(|node| node.kind == kind)
             .unwrap()
             .id
+    }
+
+    #[test]
+    fn wrapping_retains_the_original_widget_and_its_comments_inside_a_const_list() {
+        let source = "// 😀\r\nconst untouched = 5;\r\nWidget build() => const ui.Column(children: const <ui.Widget>[/* before */ const ui.Text(/* label */ 'Old'), const ui.Text('Keep')]);\r\n";
+        let scope = Scope::default();
+        let id = node(source, "Text", &scope);
+        let target = wrap_target(source, &id, &scope).unwrap();
+        assert_eq!(target.kind, "Text");
+        let parent = target.parent.unwrap();
+        assert_eq!(parent.name.as_deref(), Some("children"));
+        assert!(parent.multiple);
+
+        let (updated, selected) = wrap(
+            source,
+            &id,
+            "ui.Row(children: [original])",
+            "original",
+            &scope,
+        )
+        .unwrap();
+        assert_eq!(
+            updated,
+            "// 😀\r\nconst untouched = 5;\r\nWidget build() => ui.Column(children: <ui.Widget>[/* before */ ui.Row(children: [const ui.Text(/* label */ 'Old')]), const ui.Text('Keep')]);\r\n"
+        );
+        assert_eq!(selected, node(&updated, "Row", &scope));
+    }
+
+    #[test]
+    fn wrapping_does_not_retarget_selectors_or_cascades() {
+        let scope = Scope::default();
+        for source in [
+            "Widget build() => Text('A')..someMethod();",
+            "Widget build() => (Text('A')).someMethod();",
+        ] {
+            let id = node(source, "Text", &scope);
+            assert!(wrap_target(source, &id, &scope).is_err());
+            assert!(wrap(source, &id, "Padding(child: original)", "original", &scope).is_err());
+        }
+        let source = "Widget build() => decorate(Text('A')).someMethod();";
+        let id = node(source, "Text", &scope);
+        let (updated, _) =
+            wrap(source, &id, "Center(child: original)", "original", &scope).unwrap();
+        assert_eq!(
+            updated,
+            "Widget build() => decorate(Center(child: Text('A'))).someMethod();"
+        );
+    }
+
+    #[test]
+    fn modifier_links_follow_only_direct_single_child_wrappers() {
+        let source = "Widget build() => Column(children: [Padding(child: Center(child: (Text('A')))), SizedBox(width: 5), Padding(child: condition ? Text('Yes') : Text('No')), TextButton(onPressed: action, child: Text('Tap'))]);";
+        let outline = outline_in(source, &Scope::default()).unwrap();
+        let nodes = outline["nodes"].as_array().unwrap();
+        let (padding, conditional) = {
+            let mut pads = nodes.iter().filter(|node| node["type"] == "Padding");
+            (pads.next().unwrap(), pads.next().unwrap())
+        };
+        let center = nodes.iter().find(|node| node["type"] == "Center").unwrap();
+        assert_eq!(padding["modifierChild"], center["id"]);
+        assert!(
+            nodes
+                .iter()
+                .any(|node| node["id"] == center["modifierChild"] && node["type"] == "Text")
+        );
+        assert!(conditional["modifierChild"].is_null());
+        assert!(
+            nodes
+                .iter()
+                .filter(|node| matches!(
+                    node["type"].as_str(),
+                    Some("SizedBox" | "TextButton" | "Column")
+                ))
+                .all(|node| node["modifierChild"].is_null())
+        );
+    }
+
+    #[test]
+    fn spacing_modifier_preserves_its_existing_edge_insets_import() {
+        let source = "ui.Padding(padding: spacing.EdgeInsets.all(5), child: ui.Text('A'))";
+        let scope = Scope::default();
+        let outline = outline_in(source, &scope).unwrap();
+        let padding = &outline["nodes"][0];
+        assert_eq!(padding["properties"][0]["value"].as_f64(), Some(5.0));
+        let command =
+            json!({"id":padding["id"],"operation":"property","name":"padding","value":14});
+        let updated = edit_in(source, &command, &scope).unwrap();
+        assert_eq!(
+            updated,
+            "ui.Padding(padding: const spacing.EdgeInsets.all(14), child: ui.Text('A'))"
+        );
     }
 
     #[test]

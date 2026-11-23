@@ -27,6 +27,12 @@ pub fn controls(node: &Value, menu: bool) -> String {
     }
     if menu {
         output.push_str(&crate::component_panel::controls(node, true));
+        if node["libraryChildren"] == true {
+            output.push_str(r#"<button type="button" class="button soft small" role="menuitem" data-widget-library="insert">Add widget</button>"#);
+        }
+        if node["libraryWrappable"] != false {
+            output.push_str(r#"<button type="button" class="button soft small" role="menuitem" data-widget-library="wrap">Wrap widget</button>"#);
+        }
     } else {
         output.push_str("</div>");
     }
@@ -150,9 +156,19 @@ pub fn initialize() {
     dom::listen(&dom::doc(), "click", |event| {
         let action = closest(&event, "[data-widget-clipboard]")
             .and_then(|button| button.get_attribute("data-widget-clipboard"));
+        let library = closest(&event, "#widget-menu [data-widget-library]")
+            .and_then(|button| button.get_attribute("data-widget-library"));
         close();
         if let Some(action) = action {
             dom::spawn(perform(action));
+        } else if let Some(library) = library {
+            use crate::widget_library::{Operation, open};
+            let operation = if library == "wrap" {
+                Operation::Wrap
+            } else {
+                Operation::Insert
+            };
+            dom::spawn(open(operation));
         }
     });
     dom::listen(&id("explorer-tree"), "contextmenu", |event| {
