@@ -1,0 +1,200 @@
+{
+  "schemaVersion": 1,
+  "baselineVersion": "1.0",
+  "date": "2026-11-23",
+  "evaluatedCodeCommit": "b0f9956c9412ce4f08d02eae983287439fa5420e",
+  "target": "Öffentlich dokumentierte Dreamflow-Funktionen",
+  "method": {
+    "unit": "Ein Abnahmepunkt pro aufgeführtem Nutzervorgang; alle Punkte gleich gewichtet.",
+    "scores": { "implemented": 1, "partial": 0.5, "missing": 0, "unverified": 0 },
+    "implemented": "Der beschriebene Vorgang ist im Quellcode umgesetzt und wurde im Audit nachvollzogen. Belege nennen Code und, soweit vorhanden, Tests. Das ist keine Garantie für alle Eingaben oder Betriebssysteme.",
+    "partial": "Ein benennbarer Teil funktioniert; die Notiz nennt den Unterschied zum Abnahmepunkt.",
+    "missing": "Für den beschriebenen integrierten Vorgang wurde im geprüften Quellcode keine Umsetzung gefunden.",
+    "unverified": "Code ist vorhanden, aber der entscheidende Geräte- oder Anbieterablauf ist nicht ausreichend belegt. Bis zur Abnahme gibt es keine Punkte.",
+    "denominatorPolicy": "IDs und Umfang dieser Basis bleiben bei Fortschrittsmeldungen gleich. Neue oder geänderte Kriterien benötigen eine neue Basisversion und eine Erklärung; keine zusätzlichen einfachen Punkte zur Erhöhung der Quote.",
+    "limitations": [
+      "Referenz sind öffentliche Dokumentation und REA-Beobachtungen öffentlicher Seiten, keine angemeldete Dreamflow-Sitzung.",
+      "Die Quote beschreibt diese dokumentierte Vergleichsbasis, nicht den gesamten unbekannten Produktumfang, verbleibenden Zeitaufwand, KI-Qualität oder optische Gleichheit.",
+      "Ein vorhandenes Eingabefeld, ein Beispielprojekt oder ein simulierter API-Test belegt keinen erfolgreichen produktiven Store-Upload.",
+      "Die Basis bündelt verwandte Unterfunktionen zu Nutzervorgängen. Gleichgewichtung ist eine transparente Projektkonvention, keine objektive Messung ihrer Schwierigkeit."
+    ]
+  },
+  "sources": {
+    "welcome": "https://docs.dreamflow.com/",
+    "quickstart": "https://docs.dreamflow.com/quickstart/",
+    "workspace": "https://docs.dreamflow.com/workspace/",
+    "tree": "https://docs.dreamflow.com/workspace/widget-tree/",
+    "content": "https://docs.dreamflow.com/workspace/content-panel/",
+    "properties": "https://docs.dreamflow.com/workspace/properties-panel/",
+    "agent": "https://docs.dreamflow.com/workspace/agent-panel/",
+    "planner": "https://docs.dreamflow.com/workspace/screen-planner/",
+    "assets": "https://docs.dreamflow.com/workspace/assets/",
+    "theme": "https://docs.dreamflow.com/workspace/theme/",
+    "mobile": "https://docs.dreamflow.com/test/test-on-mobile-device/",
+    "firebase": "https://docs.dreamflow.com/integrations/firebase/",
+    "supabase": "https://docs.dreamflow.com/integrations/supabase/",
+    "git": "https://docs.dreamflow.com/integrations/git/",
+    "web": "https://docs.dreamflow.com/deployment/web-deployment/",
+    "play": "https://docs.dreamflow.com/deployment/google-playstore-deployment/",
+    "apple": "https://docs.dreamflow.com/deployment/apple-app-store-deployment/",
+    "prepublish": "https://docs.dreamflow.com/publish/pre-checks-before-publishing/"
+  },
+  "verification": {
+    "review": "Quellcodeprüfung am 2026-11-23; fehlende Bedienabläufe zusätzlich über Aktionslisten, Datenmodelle und UI-Einstiegspunkte geprüft.",
+    "ci": "https://github.com/685/freeflow/actions/runs/45061752226",
+    "ciScope": "60 Rust-Tests unter Windows; Linux und macOS zusätzlich mit Unix-spezifischen Prüfungen. Native Tests und Rust-WASM-Build auf allen drei Plattformen erfolgreich für den ausgewerteten Code-Commit.",
+    "existingRuntimeEvidence": [
+      "Die vorangegangenen lokalen Browser-/Flutter-Prüfungen wurden nicht allein für diese Dokumentationsänderung erneut ausgeführt.",
+      "Widget-Bibliothek: 674 Framework-Konstruktoren, Projekt- und Paket-Widgets, benannte Konstruktoren, Dart-Prüfung, Imports, genaue Undo/Redo-Wiederherstellung, veraltete Revisionen, MCP-Einfügen und lesender Agent-Zugriff geprüft.",
+      "Hot reload: laufende Route, Zähler und Texteingabe bleiben erhalten; Hot restart setzt Zustand zurück; Fehler und Wiederherstellung wurden in einer realen Flutter-Web-App geprüft.",
+      "Vorhandene Assets-, Theme-, Clipboard-, Komponenten-, Telefonvorschau- und Agent-Kontext-Prüfungen ergänzen die Quellcode- und Rust-Testbelege."
+    ],
+    "rea": {
+      "environment": "Ubuntu unter WSL, installiertes Reverse Engineer Anything",
+      "scope": "Gerenderte öffentliche Dokumentation zu Properties, Agent, Screen Planner und Supabase; keine Konto- oder Projektaktionen.",
+      "observedSections": {
+        "properties": ["Switch Constructors", "Modifiers", "Conditional Values"],
+        "agent": ["Screenshot Mode", "Prompt Edit", "Restore Checkpoint", "OpenAI Integration"],
+        "planner": ["Page Editor", "Theme Editor"],
+        "supabase": ["Schema Deployment", "Sample Data", "Edge Functions"]
+      },
+      "summary": "Öffentlich sichtbare Abschnitte bestätigen Konstruktorwechsel, Modifiers, Screenshot Mode, Prompt Edit, Restore Checkpoint, Theme Editor sowie Schema- und Edge-Function-Abläufe."
+    }
+  },
+  "excluded": [
+    "Preise, Credits, Abos, Marketingaussagen und Dreamflow-Kontoverwaltung.",
+    "Identische interne Technologien: Freeflow bleibt gemäß Projektvorgabe Rust/Rust-WASM; erzeugte Apps bleiben Flutter/Dart.",
+    "Zusätzliche Freeflow-Funktionen wie MCP oder der lokale SDK-Installer geben keine Ausgleichspunkte für fehlende Dreamflow-Funktionen.",
+    "In der Referenz nur angekündigte Funktionen, etwa Custom Web Deployment; manuelle Store-Review-Schritte außerhalb beider Produkte zählen nicht als fehlende automatische Funktion."
+  ],
+  "areas": [
+    {
+      "id": "project", "name": "Projektstart und Workspace",
+      "criteria": [
+        { "id": "P01", "criterion": "Leeres Flutter-Projekt erstellen und wieder öffnen", "status": "implemented", "sources": ["quickstart"], "code": ["src/projects.rs", "web/src/dialogs.rs"], "checks": ["src/tests.rs::legacy_project_metadata_and_settings_open_without_conversion"], "note": "Blank-Projekt und Projektverwaltung sind vorhanden; lokale Toolchain statt Cloud-Sitzung." },
+        { "id": "P02", "criterion": "Neue App direkt aus Text- oder Bildprompt starten", "status": "partial", "sources": ["quickstart"], "code": ["src/projects.rs", "web/src/agent_panel.rs"], "checks": [], "note": "Agent kann ein angelegtes Projekt bearbeiten und Bilder erhalten; ein durchgehender Prompt-zuerst-Startdialog fehlt." },
+        { "id": "P03", "criterion": "Aus einer Auswahl ausgearbeiteter App-Vorlagen starten", "status": "partial", "sources": ["quickstart"], "code": ["templates/catalog.json", "src/projects.rs"], "checks": [], "note": "Zwei Starter: Daymark und Blank. Keine vergleichbar breite Vorlagenauswahl belegt; Designqualität wird nicht als gleich bewertet." },
+        { "id": "P04", "criterion": "Zwischen Vorschau, Code und Split sowie Arbeitsbereichen wechseln", "status": "implemented", "sources": ["workspace", "content"], "code": ["web/src/state.rs", "web/src/view.rs", "web/src/lib.rs"], "checks": [], "note": "Design-, Code-, Split- und Plan-Modus sowie Panel-Steuerung sind vorhanden." },
+        { "id": "P05", "criterion": "Gespeicherte Projektänderungen gemeinsam rückgängig machen und wiederholen", "status": "implemented", "sources": ["workspace"], "code": ["src/edits.rs", "web/src/saved_edits.rs"], "checks": ["src/tests.rs::saved_multi_file_edits_replay_together_and_reject_external_changes_before_writing", "src/tests.rs::saved_visual_edits_undo_redo_exact_source_and_branch_after_a_new_edit"], "note": "Gruppierte Undo/Redo-Abläufe funktionieren. Laufendes Sitzungshistorium und dauerhafte Dateiversionen sind unterschiedliche Funktionen." },
+        { "id": "P06", "criterion": "Mit mehreren Personen gleichzeitig im selben Projektcode arbeiten", "status": "missing", "sources": ["content"], "code": ["web/src/editor.rs", "src/server.rs"], "checks": [], "note": "Die Content-Dokumentation nennt Echtzeit-Zusammenarbeit. In Freeflow gibt es keinen gemeinsamen Mehrbenutzerzustand oder entsprechende Oberfläche; Referenzablauf nicht angemeldet geprüft." },
+        { "id": "P07", "criterion": "Workspace und Baum vollständig über die dokumentierten Tastaturaktionen bedienen", "status": "partial", "sources": ["workspace"], "code": ["web/src/lib.rs", "web/src/widget_clipboard.rs", "web/src/preview_canvas.rs"], "checks": [], "note": "Speichern, Suche, Undo, Clipboard und einige Canvas-Aktionen sind vorhanden; vollständige Panel-, Baum- und Shortcut-Hilfe-Parität fehlt." }
+      ]
+    },
+    {
+      "id": "agent", "name": "Agent und Screen Planner",
+      "criteria": [
+        { "id": "A01", "criterion": "Mit einem Agenten streamend über Projektcode und ausgewählte Widgets arbeiten", "status": "implemented", "sources": ["agent"], "code": ["src/agent.rs", "src/agent/provider.rs", "web/src/agent_panel.rs"], "checks": [], "note": "Ask/Edit, Dateitools, Auswahlkontext und Streaming sind vorhanden. Ergebnisqualität des gewählten Modells ist nicht mit Dreamflow gemessen." },
+        { "id": "A02", "criterion": "Bilder und automatisch aufgenommene App-/Widget-Screenshots als Agent-Kontext nutzen", "status": "partial", "sources": ["agent"], "code": ["web/src/agent_panel.rs", "src/agent.rs"], "checks": [], "note": "Bildanhänge und technischer Auswahlkontext sind vorhanden; automatische Vorschau-/Widget-Aufnahme und Add-to-Agent mit Ausschnitt fehlen." },
+        { "id": "A03", "criterion": "Ein Widget direkt per Prompt Edit aus Baum oder Vorschau ändern", "status": "missing", "sources": ["agent", "tree"], "code": ["web/src/widget_clipboard.rs", "web/src/lib.rs"], "checks": [], "note": "Allgemeiner Agent mit Widget-Auswahl ist vorhanden, aber kein entsprechender direkter Widget-Kontextdialog." },
+        { "id": "A04", "criterion": "Projektweite und unterordnerspezifische Agent-Regeln laden", "status": "implemented", "sources": ["agent"], "code": ["src/project_rules.rs", "src/agent.rs"], "checks": ["src/tests.rs::project_rules_follow_file_scope_and_remain_visible_to_the_editor", "src/tests.rs::project_rules_bound_unicode_excerpts_and_skip_non_text_files"], "note": "AGENTS.md und weitere Formate, Verzeichnisscope und Regeln bei Dateitools sind vorhanden; Konfliktprioritäten sind nicht identisch zur Referenz." },
+        { "id": "A05", "criterion": "Den Agenten App-, Build- und Fehlerlogs lesen lassen", "status": "implemented", "sources": ["agent"], "code": ["src/jobs.rs", "src/agent.rs", "src/mcp.rs"], "checks": ["src/jobs.rs::app_logs_are_project_scoped_and_ignore_stale_preview_batches"], "note": "Projektbezogene Logs mit begrenzten Ausschnitten, Cursor und lesendem Ask-Zugriff sind vorhanden." },
+        { "id": "A06", "criterion": "Das gesamte Projekt auf den Zustand vor einer früheren Agent-Anfrage zurücksetzen", "status": "partial", "sources": ["agent"], "code": ["src/agent.rs", "src/projects.rs"], "checks": ["src/tests.rs::project_batch_checks_all_revisions_before_applying_an_agent_edit"], "note": "Agent-Checkpoints stellen ihre betroffenen Dateien bei passenden Revisionen wieder her. Spätere manuelle Änderungen werden nicht wie beim dokumentierten projektweiten Zurückspulen überschrieben." },
+        { "id": "A07", "criterion": "Mehrere Agent-Threads behalten und zwischen ihnen navigieren", "status": "missing", "sources": ["agent"], "code": ["src/agent.rs", "web/src/agent_panel.rs"], "checks": [], "note": "Ein Chat pro Projekt; New leert die Nachrichten. Keine archivierte Thread-Auswahl oder Thread-Navigation wie im Checkpoint-Guide beschrieben." },
+        { "id": "A08", "criterion": "Screens und Navigation vor der Generierung visuell planen und überarbeiten", "status": "partial", "sources": ["planner"], "code": ["web/src/planner.rs"], "checks": [], "note": "Ziel, Screen-Karten, Beschreibungen, Verknüpfungen und Agent-Übergabe sind vorhanden; generierte visuelle Screen-Entwürfe und der Page Editor fehlen." },
+        { "id": "A09", "criterion": "Das globale Design mit Presets und Typografie im Screen Planner vorab festlegen", "status": "missing", "sources": ["planner"], "code": ["web/src/planner.rs", "web/src/design_values.rs"], "checks": [], "note": "Theme-Werte können später im Projekt bearbeitet werden; kein integrierter Theme Editor für den Generierungsplan." },
+        { "id": "A10", "criterion": "KI-Funktionen der erzeugten App über einen verwalteten Entwicklungsproxy ausprobieren", "status": "missing", "sources": ["agent"], "code": ["src/agent/provider.rs", "src/backends.rs"], "checks": [], "note": "Die eigene Provider-Konfiguration betrifft den Workbench-Agenten. Kein entsprechender verwalteter Proxy für OpenAI-Aufrufe aus der erzeugten App." }
+      ]
+    },
+    {
+      "id": "tree", "name": "Widget-Baum und Struktur",
+      "criteria": [
+        { "id": "W01", "criterion": "Den tatsächlich gerenderten Widget-Baum einschließlich Builder-Instanzen anzeigen", "status": "implemented", "sources": ["tree"], "code": ["web/src/preview_inspector.rs", "src/preview.rs", "src/inspector.rs"], "checks": ["src/tests.rs::live_inspector_prefers_the_matching_widget_column_and_project"], "note": "Live-Instanzen und Quellbaum sind getrennt verfügbar; abhängig von kompatibler Debug-Vorschau." },
+        { "id": "W02", "criterion": "Zwischen Widget-Auswahl, Hervorhebung, Definitionen, Referenzen und Code navigieren", "status": "implemented", "sources": ["tree", "content"], "code": ["web/src/component_panel.rs", "src/components.rs", "src/inspector.rs"], "checks": ["src/tests.rs::component_definition_owners_include_state_builds_and_part_files"], "note": "Auswahl, Inspect, Komponentennavigation und Code-Sprung sind vorhanden; Projektreferenzen werden begrenzt zurückgegeben." },
+        { "id": "W03", "criterion": "Komponenten aus Klassen, Funktionen und Variablen als eigenständige Baumknoten erkennen", "status": "partial", "sources": ["tree"], "code": ["src/visual/components.rs"], "checks": ["src/tests.rs::project_component_imports_exports_and_inheritance_keep_widget_edits_available"], "note": "Klassen, State-Builds, Imports und Parts sind erkannt; Funktionen und Variablen werden nicht gleichwertig als Komponenten modelliert." },
+        { "id": "W04", "criterion": "Zwischen vereinfachtem und detailliertem Baum mit ausgeblendeten Modifiers wechseln", "status": "missing", "sources": ["tree"], "code": ["web/src/view.rs", "web/src/state.rs"], "checks": [], "note": "Source/Rendered ist eine andere Unterscheidung. Kein Consolidated/Detailed-Schalter mit Modifier-Filter." },
+        { "id": "W05", "criterion": "Framework-, Projekt- und Paket-Widgets samt benannten Konstruktoren passend einfügen", "status": "implemented", "sources": ["tree"], "code": ["src/widget_library.rs", "src/visual/library.rs", "web/src/widget_library.rs"], "checks": ["src/tests.rs::widget_library_reads_resolved_dependencies_and_limits_private_constructors_to_their_file"], "note": "Katalog, aufgelöste Parameter, passende Kindplätze, Imports, Dart-Prüfung und Undo sind vorhanden. Der Index hat dokumentierte Grenzen; 674 Framework-Konstruktoren im geprüften SDK." },
+        { "id": "W06", "criterion": "Widgets im gesamten Baum per Drag-and-drop umordnen, umhängen und entfernen", "status": "partial", "sources": ["tree"], "code": ["src/visual.rs", "web/src/lib.rs"], "checks": ["src/tests.rs::widget_moves_cross_parents_and_leave_required_children_valid", "src/tests.rs::widget_branches_and_builder_slots_follow_the_selected_constructor"], "note": "Unterstützte Kindplätze und literale Listen in einer Datei funktionieren; berechnete Listen und beliebige dynamische Dart-Strukturen sind eingeschränkt." },
+        { "id": "W07", "criterion": "Widget-Konstruktoren über Kontextmenü und Tastatur kopieren, ausschneiden und einfügen", "status": "implemented", "sources": ["tree"], "code": ["web/src/widget_clipboard.rs", "src/visual.rs"], "checks": ["src/tests.rs::widget_clipboard_preserves_callbacks_comments_and_import_prefixes", "src/tests.rs::widget_clipboard_checks_revisions_and_failed_moves_are_atomic"], "note": "Die dokumentierten Clipboard-Aktionen und Duplizieren sind vorhanden. Beim Kopieren in andere Dateien müssen referenzierte Imports bei Bedarf ergänzt werden." },
+        { "id": "W08", "criterion": "Widgets mit der Auswahl verfügbarer Layout- und Verhaltens-Wrapper umgeben", "status": "partial", "sources": ["tree", "properties"], "code": ["src/widgets.json", "src/visual.rs", "web/src/dialogs.rs"], "checks": ["src/tests.rs::visual_edits_preserve_dart_expressions_and_siblings"], "note": "Nur Padding, Center, SizedBox und Card im Wrap-Menü. Kein allgemeiner Wrapper-Katalog für Container, Align, Transform und weitere passende Widgets." }
+      ]
+    },
+    {
+      "id": "properties", "name": "Eigenschaften und Modifiers",
+      "criteria": [
+        { "id": "V01", "criterion": "Widget-Eigenschaften nach Name, Typ oder Wert durchsuchen", "status": "implemented", "sources": ["properties"], "code": ["web/src/property_panel.rs", "web/src/view.rs"], "checks": [], "note": "Suchfeld und Filterung der Eigenschaften sind vorhanden." },
+        { "id": "V02", "criterion": "Für alle Widget-Parameter passende visuelle Typ-Editoren und Vorschläge anbieten", "status": "partial", "sources": ["properties"], "code": ["src/widgets.json", "src/visual/properties.rs", "web/src/view.rs", "src/language.rs"], "checks": ["src/language.rs::property_suggestions_keep_named_parameters_before_applying_the_result_limit"], "note": "44 statische Widget-Spezifikationen sowie SDK-gestützte Parameter-Vorschläge; andere und komplexe Werte verwenden häufig den Dart-Editor." },
+        { "id": "V03", "criterion": "Vollständige Dart-Ausdrücke und Callbacks für einzelne Eigenschaften bearbeiten", "status": "implemented", "sources": ["properties"], "code": ["src/visual/properties.rs", "web/src/property_panel.rs"], "checks": ["src/tests.rs::property_expressions_edit_callbacks_and_nested_values_without_replacing_other_source", "src/tests.rs::property_expression_inputs_cannot_escape_the_selected_argument"], "note": "Ausdruckseditor, verschachtelte Felder, Reset, Dart-Prüfung und gezielte Quelländerung sind vorhanden." },
+        { "id": "V04", "criterion": "Bedingungen und verschachtelte Wertezweige für beliebige Eigenschaften visuell aufbauen", "status": "partial", "sources": ["properties"], "code": ["src/visual.rs", "web/src/view.rs"], "checks": ["src/tests.rs::visual_conditional_values_keep_conditions_comments_and_other_branches"], "note": "Vorhandene unterstützte literale Zweige sind visuell editierbar; vollständige Bedingungs- und Zweigkonstruktion für beliebige Typen benötigt Dart." },
+        { "id": "V05", "criterion": "Beliebige Listen- und Objektwerte mit passenden strukturierten Editoren bearbeiten", "status": "partial", "sources": ["properties"], "code": ["web/src/property_panel.rs", "src/visual/properties.rs", "src/visual.rs"], "checks": [], "note": "Kindlisten und einige verschachtelte Konstruktorfelder sind unterstützt; kein allgemeiner visueller Collection-/Objekt-Editor." },
+        { "id": "V06", "criterion": "Den Konstruktor eines vorhandenen Widgets per Auswahl wechseln", "status": "missing", "sources": ["properties"], "code": ["web/src/property_panel.rs", "web/src/widget_library.rs"], "checks": [], "note": "Benannte Konstruktoren können neu eingefügt werden. Ein bestehendes Widget lässt sich nicht über einen Constructor-Schalter umstellen und abgleichen." },
+        { "id": "V07", "criterion": "Umgebende Modifiers im Eigenschaftspanel zusammengefasst hinzufügen und bearbeiten", "status": "missing", "sources": ["properties"], "code": ["web/src/view.rs", "web/src/property_panel.rs"], "checks": [], "note": "Wrapper sind einzelne Baumknoten; kein entsprechender Modifiers-Bereich für das ausgewählte Basis-Widget." }
+      ]
+    },
+    {
+      "id": "design", "name": "Assets und Theme",
+      "criteria": [
+        { "id": "D01", "criterion": "Medien und Fonts hochladen, kategorisieren und für Flutter registrieren", "status": "implemented", "sources": ["assets"], "code": ["src/projects/assets.rs", "web/src/asset_panel.rs"], "checks": ["src/tests.rs::uploaded_assets_and_pubspec_undo_together_without_losing_existing_yaml", "src/tests.rs::font_registration_directory_assets_and_structured_asset_entries_are_preserved"], "note": "Mehrfachupload, Kategorien und pubspec-Anpassung sind vorhanden; Größen- und Dateitypgrenzen sind dokumentiert." },
+        { "id": "D02", "criterion": "Assets suchen, ansehen, herunterladen und löschen", "status": "implemented", "sources": ["assets"], "code": ["src/projects/assets.rs", "web/src/asset_panel.rs"], "checks": ["src/tests.rs::asset_conflicts_and_invalid_manifests_leave_files_and_history_untouched"], "note": "Suche, Medienvorschau, Download und Delete mit Undo sind vorhanden." },
+        { "id": "D03", "criterion": "Bilder und Schriftfamilien aus Assets in Widget-Eigenschaften auswählen", "status": "implemented", "sources": ["assets", "properties"], "code": ["web/src/asset_panel.rs", "src/visual/properties.rs"], "checks": ["src/tests.rs::asset_and_font_properties_keep_constructor_arguments_and_callbacks"], "note": "Image.asset-Bitmap-Picker und Font-Auswahl sind vorhanden; andere Medien bleiben im Code referenzierbar." },
+        { "id": "D04", "criterion": "Gemeinsame Farben, Textstile, Abstände und Radien zentral bearbeiten", "status": "implemented", "sources": ["theme"], "code": ["src/design_values.rs", "src/visual/design.rs", "web/src/design_values.rs"], "checks": ["src/tests.rs::design_values_index_only_top_level_and_static_declarations_and_preserve_other_style_fields", "src/tests.rs::design_value_layout_edits_preserve_constructor_shape_comments_and_unsafe_expression_guards"], "note": "Typisierte Editoren und Dart-Fallback für erkannte Deklarationen sind vorhanden. Beliebige Theme-Organisation wird separat in D06 bewertet." },
+        { "id": "D05", "criterion": "Gemeinsame Designwerte über die Eigenschaftseditoren wiederverwenden", "status": "implemented", "sources": ["theme"], "code": ["src/design_values.rs", "src/visual/design.rs", "web/src/design_values.rs"], "checks": ["src/tests.rs::design_binding_import_and_value_edit_are_reversible_and_check_both_revisions", "src/tests.rs::design_binding_creates_nested_text_styles_in_the_widgets_import_namespace"], "note": "Auswahl geeigneter const-Werte, notwendige Imports und gemeinsame Undo-Änderung sind vorhanden; dynamische Theme-Strukturen siehe D06." },
+        { "id": "D06", "criterion": "Beliebig organisierten vorhandenen Theme-Code ohne feste Struktur semantisch erkennen", "status": "missing", "sources": ["theme"], "code": ["src/visual/design.rs", "src/design_values.rs"], "checks": [], "note": "Begrenzter Syntaxindex für Top-Level-/Static-Deklarationen; keine KI-gestützte Theme-Erkennung für beliebige dynamische Muster wie in der Referenz beschrieben." },
+        { "id": "D07", "criterion": "Hell-/Dunkelmodus der laufenden App ohne Quelländerung prüfen", "status": "implemented", "sources": ["theme", "content"], "code": ["web/src/preview_canvas.rs", "web/src/design_values.rs", "src/preview.rs"], "checks": [], "note": "App-Brightness-Steuerung in kompatibler Debug-Vorschau; zuvor im laufenden Theme-Test geprüft." }
+      ]
+    },
+    {
+      "id": "editor", "name": "Code-Editor und Dart-Werkzeuge",
+      "criteria": [
+        { "id": "C01", "criterion": "Dateien mit Tabs, Dart-Hervorhebung und Speicherhistorie bearbeiten", "status": "implemented", "sources": ["content"], "code": ["web/src/editor.rs", "web/src/view.rs", "src/projects.rs"], "checks": ["src/tests.rs::project_revisions_history_and_source_archives"], "note": "Rust-WASM-Editor statt Monaco; die genannten Grundfunktionen sind vorhanden. Monaco als interne Bibliothek ist kein Paritätsziel." },
+        { "id": "C02", "criterion": "Dart-/Flutter-Vervollständigung beim Schreiben verwenden", "status": "implemented", "sources": ["content", "welcome"], "code": ["src/language.rs", "web/src/editor_assist.rs"], "checks": ["src/language.rs::dart_positions_follow_utf16_with_crlf_and_emoji"], "note": "Vervollständigung aus dem installierten Dart Language Server; eigener Editor mit explizitem Suggest-Einstieg." },
+        { "id": "C03", "criterion": "Fehler und Warnungen auch für ungespeicherten Dart-Code anzeigen", "status": "implemented", "sources": ["content", "workspace"], "code": ["src/language.rs", "web/src/editor_assist.rs"], "checks": ["src/language.rs::diagnostic_limits_cannot_hide_an_error_after_many_warnings"], "note": "Overlays und Problems-Anzeige sind vorhanden; Fehler werden vor dem Antwortlimit priorisiert." },
+        { "id": "C04", "criterion": "Beliebige Symbole per Typinfo, Definition und Referenzsuche navigieren", "status": "partial", "sources": ["content"], "code": ["src/language.rs", "web/src/editor_assist.rs", "web/src/component_panel.rs"], "checks": [], "note": "Typinfo und Projektdefinitionen sind vorhanden; Referenzoberfläche konzentriert sich auf Komponenten, Navigation außerhalb des Projekts ist begrenzt." },
+        { "id": "C05", "criterion": "Dart-Code im Editor formatieren", "status": "implemented", "sources": ["content"], "code": ["src/flutter.rs", "web/src/lib.rs"], "checks": [], "note": "Format-Aktion über das installierte Dart-Werkzeug ist vorhanden." },
+        { "id": "C06", "criterion": "Dart-Quick-Fixes und Code-Actions direkt auf Probleme anwenden", "status": "missing", "sources": ["welcome"], "code": ["src/language.rs", "web/src/editor_assist.rs"], "checks": [], "note": "Kein textDocument/codeAction-Ablauf oder entsprechende Quick-Fix-Oberfläche. Allgemeine Agent-Bearbeitung ist ein anderer Vorgang." }
+      ]
+    },
+    {
+      "id": "preview", "name": "Vorschau und Gerätetests",
+      "criteria": [
+        { "id": "R01", "criterion": "Dart-Änderungen mit Hot reload ohne Verlust des App-Zustands übernehmen", "status": "implemented", "sources": ["content"], "code": ["src/preview.rs", "src/jobs.rs", "web/src/view.rs"], "checks": ["src/jobs.rs::hot_reload_keeps_the_preview_page_and_recovers_from_errors", "src/tests.rs::preview_hot_reload_requires_a_known_compatible_flutter_sdk"], "note": "Realer Zustandstest mit Route, Zähler und Textfeld bestanden; Stateful-Web-Hot-reload benötigt ein erkanntes kompatibles Flutter-SDK ab 3.38." },
+        { "id": "R02", "criterion": "Vorschau neu starten, stoppen und nach Compilerfehlern wiederherstellen", "status": "implemented", "sources": ["content"], "code": ["src/jobs.rs", "src/preview.rs", "web/src/view.rs"], "checks": ["src/tests.rs::preview_waits_for_flutter_compilation_even_if_http_responds", "src/tests.rs::rapid_saves_and_deleted_libraries_keep_reload_state_and_source_consistent"], "note": "Reload-/Restart-Unterscheidung, Fehlererhalt und Wiederanlauf sind vorhanden; Web-Build-Fallback ist separat unterstützt." },
+        { "id": "R03", "criterion": "Telefon-, Tablet-, Desktop- und freie Vorschau mit Zoom und Pan nutzen", "status": "implemented", "sources": ["content"], "code": ["web/src/preview_canvas.rs", "web/src/view.rs"], "checks": [], "note": "Geräteformate, 30–300 Prozent Zoom, Pan, Fit und gespeicherte Präferenzen sind vorhanden." },
+        { "id": "R04", "criterion": "Ein laufendes Widget im Canvas auswählen und seinem Quellcode zuordnen", "status": "implemented", "sources": ["content"], "code": ["web/src/preview_inspector.rs", "src/inspector.rs"], "checks": ["src/tests.rs::live_inspector_prefers_the_matching_widget_column_and_project"], "note": "Inspect-Auswahl und Abgleich nach Reload sind in realer Flutter-Vorschau geprüft." },
+        { "id": "R05", "criterion": "Laufzeit-/Build-Logs, App-Status und Dependency-Refresh im Workspace nutzen", "status": "implemented", "sources": ["content", "workspace"], "code": ["src/jobs.rs", "web/src/preview_logs.rs", "web/src/view.rs"], "checks": ["src/jobs.rs::app_log_excerpts_keep_the_latest_lines_and_bound_unicode_output"], "note": "print/debugPrint, Framework-Ausgaben, Jobstatus und Refresh Flutter dependencies sind vorhanden." },
+        { "id": "R06", "criterion": "Eine beständige mobile Live-Vorschau per QR/Link einschließlich Home-Screen-Nutzung anbieten", "status": "partial", "sources": ["mobile"], "code": ["src/phone_preview.rs", "web/src/phone_preview.rs"], "checks": ["src/phone_preview.rs::phone_link_serves_versioned_web_builds_until_revoked"], "note": "Getesteter LAN-Link mit QR und Build-Refresh. Link gilt für die Freigabesitzung; kein gleichwertiger übergreifend beständiger Projektlink oder belegter PWA-Installationsablauf." },
+        { "id": "R07", "criterion": "Auf echtem Android-/iOS-Gerät oder Simulator starten, neu laden und DevTools öffnen", "status": "unverified", "sources": ["mobile"], "code": ["src/devices.rs", "web/src/device_panel.rs"], "checks": ["src/devices.rs::flutter_device_ids_accept_adb_endpoints_and_reject_options"], "note": "Geräteerkennung, Run/Reload/Restart, Logs und DevTools-Link sind implementiert; durchgängiger Test auf realem Android und iOS fehlt als Nachweis." }
+      ]
+    },
+    {
+      "id": "backends", "name": "Firebase und Supabase",
+      "criteria": [
+        { "id": "B01", "criterion": "Firebase-Client samt Auth-/Firestore-Anbindung für die App einrichten", "status": "partial", "sources": ["firebase"], "code": ["src/backends.rs", "templates/freeflow_backends.dart", "templates/firebase-options.dart"], "checks": ["src/tests.rs::backends_generate_initialization_and_reject_privileged_keys"], "note": "Konfigurationswerte, Initialisierung und Pakete sind vorhanden; vollständige appbezogene Auth-, Datenmodell-, Service- und Screen-Generierung ist nicht integriert belegt." },
+        { "id": "B02", "criterion": "Firebase per OAuth verbinden und bestehende oder neue Cloud-Projekte verwalten", "status": "missing", "sources": ["firebase"], "code": ["src/backends.rs", "web/src/dialogs.rs"], "checks": [], "note": "Manuelles Eintragen öffentlicher Clientwerte; kein Google-OAuth-/Firebase-Projektverwaltungsablauf." },
+        { "id": "B03", "criterion": "Firebase-Regeln, Schemas und Indizes erzeugen und über den Workspace deployen", "status": "missing", "sources": ["firebase"], "code": ["src/backends.rs", "src/jobs.rs"], "checks": [], "note": "Keine entsprechende Verwaltungs-/Deployment-Funktion. Client-Initialisierung allein erfüllt diesen Punkt nicht." },
+        { "id": "B04", "criterion": "Supabase-Client mit appbezogenen Auth-, Modell- und Service-Bausteinen einrichten", "status": "partial", "sources": ["supabase"], "code": ["src/backends.rs", "templates/freeflow_backends.dart"], "checks": ["src/tests.rs::backends_generate_initialization_and_reject_privileged_keys"], "note": "URL/Key-Validierung, Paket und Initialisierung sind vorhanden; kein vollständiger geführter Generate-Client-Code-Ablauf für die App." },
+        { "id": "B05", "criterion": "Supabase per OAuth verbinden und Projekte in einer Organisation erstellen oder auswählen", "status": "missing", "sources": ["supabase"], "code": ["src/backends.rs", "web/src/dialogs.rs"], "checks": [], "note": "Manuelle Client-Konfiguration statt integrierter Organisations- und Projektverwaltung." },
+        { "id": "B06", "criterion": "Supabase-Tabellen, Migrationen und RLS-Regeln im Workspace anwenden", "status": "missing", "sources": ["supabase"], "code": ["src/backends.rs", "src/jobs.rs"], "checks": [], "note": "Keine Migration-/Schema-Deployment-Oberfläche oder entsprechende Anbieteraufrufe." },
+        { "id": "B07", "criterion": "Schema- und benutzerbezogene Supabase-Beispieldaten direkt erzeugen", "status": "missing", "sources": ["supabase"], "code": ["src/backends.rs"], "checks": [], "note": "Keine entsprechende Sample-Data-Funktion." },
+        { "id": "B08", "criterion": "Supabase Edge Functions samt Secrets aus dem Workspace erstellen und deployen", "status": "missing", "sources": ["supabase"], "code": ["src/backends.rs", "src/jobs.rs"], "checks": [], "note": "Kein integrierter Functions-/Secrets-/Deployment-Ablauf. Allgemeine Dateibearbeitung ersetzt diesen Vorgang nicht." }
+      ]
+    },
+    {
+      "id": "git", "name": "Git und Änderungen",
+      "criteria": [
+        { "id": "G01", "criterion": "Repository verbinden, Änderungen und Diffs prüfen, stagen und committen", "status": "implemented", "sources": ["git"], "code": ["src/git.rs", "web/src/source_control.rs"], "checks": [], "note": "Integrierte Git-Aktionen und Oberfläche vorhanden; Authentifizierung verwendet die lokal konfigurierten Git-Zugangsdaten." },
+        { "id": "G02", "criterion": "Branches erstellen/wechseln sowie Fetch, Pull und Push ausführen", "status": "implemented", "sources": ["git"], "code": ["src/git.rs", "web/src/source_control.rs"], "checks": [], "note": "Branch-/Tracking-/Sync-Aktionen sind im Code vorhanden; Anbieter-Tokenverwaltung erfolgt über das lokale Git-System." },
+        { "id": "G03", "criterion": "Git-Konflikte vergleichen, eine Seite übernehmen oder manuell lösen", "status": "implemented", "sources": ["git"], "code": ["src/git.rs", "web/src/source_control.rs"], "checks": [], "note": "Konfliktansicht, lokale/eingehende Seite, Code-Bearbeitung, Stage/Mark resolved und Merge-Abbruch sind vorhanden." },
+        { "id": "G04", "criterion": "Eine Commit-Nachricht direkt in der Versionskontrolle mit KI vorschlagen lassen", "status": "missing", "sources": ["git"], "code": ["web/src/source_control.rs"], "checks": [], "note": "Manuelles Nachrichtenfeld, kein entsprechender KI-Button oder angebundener Vorgang." }
+      ]
+    },
+    {
+      "id": "deploy", "name": "Export und Veröffentlichung",
+      "criteria": [
+        { "id": "S01", "criterion": "Das Flutter-Projekt als weiterbearbeitbaren Quellcode exportieren", "status": "implemented", "sources": ["mobile"], "code": ["src/archive.rs", "src/jobs.rs"], "checks": ["src/tests.rs::project_revisions_history_and_source_archives"], "note": "Quell-ZIP ist vorhanden; lokale private Konfiguration und Signierdaten bleiben ausgeschlossen." },
+        { "id": "S02", "criterion": "Die Web-App ohne separates Hosting-Setup veröffentlichen, aktualisieren und zurückziehen", "status": "partial", "sources": ["web"], "code": ["src/deploy.rs", "web/src/web_publish.rs", "src/jobs.rs"], "checks": ["src/deploy.rs::builds_uploads_recovers_and_unpublishes_on_the_same_site"], "note": "Web-Export und Netlify-Deployment mit Update/Unpublish vorhanden. Eigenes Netlify-Konto/Token erforderlich; keine verwaltete Sofort-Hosting-Entsprechung, Anbieterprüfung mit simuliertem API-Server." },
+        { "id": "S03", "criterion": "Installierbares Android-APK und signiertes AAB durchgängig bauen", "status": "unverified", "sources": ["play", "mobile"], "code": ["src/jobs.rs", "src/signing.rs"], "checks": ["src/jobs.rs::release_versions_override_flutter_defaults_for_the_selected_export"], "note": "Build- und Kotlin-Gradle-Signing-Abläufe vorhanden; kein ausreichender Nachweis eines real signierten, installierten Android-Exports in diesem Audit." },
+        { "id": "S04", "criterion": "Einen neuen signierten Build erfolgreich in einen Google-Play-Track hochladen", "status": "unverified", "sources": ["play"], "code": ["src/stores.rs", "web/src/store_upload.rs"], "checks": ["src/stores.rs::google_play_preserves_active_release_and_cleans_failed_edits"], "note": "Service-Account- und Release-Logik mit API-Simulation getestet; kein bestätigter echter Play-Upload. Ein Uploadfeld oder Mock-Erfolg gibt hierfür keinen vollen Punkt." },
+        { "id": "S05", "criterion": "Auf macOS eine signierte IPA bauen und an App Store Connect übermitteln", "status": "unverified", "sources": ["apple"], "code": ["src/jobs.rs", "src/stores.rs", "web/src/store_upload.rs"], "checks": ["src/jobs.rs::failed_ipa_export_cannot_reuse_an_older_ipa"], "note": "IPA-Auswahl und Apple-Uploadpfad sind vorhanden; vollständiger Nachweis mit Xcode, Apple-Team und angenommenem Build fehlt." },
+        { "id": "S06", "criterion": "App-Version, Buildnummer und Zielparameter pro Release festlegen", "status": "implemented", "sources": ["play", "apple"], "code": ["src/jobs.rs", "web/src/dialogs.rs", "web/src/store_upload.rs"], "checks": ["src/jobs.rs::release_versions_override_flutter_defaults_for_the_selected_export"], "note": "Version/Buildnummer, Flavor/Dart-Defines und Store-Zielparameter sind vorhanden. Die echten Upload-Ergebnisse werden separat bewertet." },
+        { "id": "S07", "criterion": "Hochgeladene App-Icons konfigurieren und beim nativen Build erzeugen", "status": "missing", "sources": ["prepublish"], "code": ["src/jobs.rs", "src/projects.rs", "web/src/asset_panel.rs"], "checks": [], "note": "Bild-Upload ist vorhanden; kein integrierter flutter_launcher_icons-Vorlauf oder entsprechend geführter Icon-Build. Manuelle Einrichtung außerhalb des Workspaces bleibt möglich." }
+      ]
+    }
+  ],
+  "nextAcceptanceWork": [
+    { "ids": ["W08", "V07", "W04"], "action": "Allgemeiner Wrapper-Katalog, Modifiers-Bereich und vereinfachte Baumansicht; Änderungen an Kommentarerhalt, Typprüfung und Undo abnehmen." },
+    { "ids": ["V06", "V02", "V05"], "action": "Konstruktorwechsel für bestehende Widgets und stärker SDK-gestützte Typ-/Collection-Editoren umsetzen und in realen Flutter-Dateien prüfen." },
+    { "ids": ["A02", "A03", "A08", "A09"], "action": "Echten Widget-/Vorschau-Bildkontext, direkten Prompt Edit und visuelle Screen-/Theme-Planung ergänzen." },
+    { "ids": ["B02", "B03", "B05", "B06", "B08"], "action": "Geführte Backend-Verwaltung und Deployment mit passenden Testprojekten aufbauen; reine Client-Initialisierung nicht als Gesamtintegration werten." },
+    { "ids": ["R07", "S03", "S04", "S05"], "action": "Offene Geräte- und Anbieterabnahmen auf echter Hardware beziehungsweise Testkonten durchführen, sobald die benötigte Umgebung vorhanden ist." }
+  ]
+}

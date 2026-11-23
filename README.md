@@ -103,3 +103,5 @@ Run **cargo test --locked** to check the workbench and **cargo run --locked -p f
 ## Current scope
 
 Freeflow 0.1 covers local Flutter development, visual edits for supported Dart constructors, project AI, Git source control, backend setup, exports, Netlify publishing and store build uploads. Hosted collaboration, store review workflows and visual editing of arbitrary dynamic Dart UI are outside this release.
+
+See the dated [Dreamflow comparison and progress baseline](docs/PARITY.md) for individual acceptance criteria, evidence, known gaps and a reproducible progress score. Its [structured data](docs/parity.json) keeps the comparison criteria stable between updates; the score is not a claim of complete product parity.
