@@ -1,10 +1,10 @@
 # Freeflow ↔ Dreamflow: Vergleichsbasis 1.0
 
-**Stand: 2026-11-23 · Bewerteter Funktionsstand: [76fd26a](https://github.com/685/freeflow/commit/76fd26a3de12c152043c2172a29f274ea06918d2)**
+**Stand: 2026-11-23 · Bewerteter Funktionsstand: [003fc8a](https://github.com/685/freeflow/commit/003fc8a4cf1f1e142a06d71e09bb6d4fa102182c)**
 
-**Arbeitsquote: 61 %** — 43 von 71 gleich gewichteten Punkten.
+**Arbeitsquote: 62 %** — 44 von 71 gleich gewichteten Punkten.
 
-35 erfüllt · 16 teilweise · 16 fehlend · 4 unverifiziert.
+36 erfüllt · 16 teilweise · 15 fehlend · 4 unverifiziert.
 
 Diese Zahl ist die nachvollziehbare Bewertung der folgenden öffentlichen Vergleichsliste. Sie ist keine Behauptung, dass exakt derselbe Anteil des gesamten Dreamflow-Produkts fertig ist. Eine vollständige Gegenprüfung in einer angemeldeten Dreamflow-Sitzung, identische Modellqualität, identisches Aussehen und verbleibender Zeitaufwand wurden nicht gemessen.
 
@@ -19,7 +19,7 @@ Die Basis umfasst Projektstart, Workspace, Agent, Planung, visuellen Editor, Vor
 | Fehlt | 0 | Für den beschriebenen integrierten Vorgang wurde im geprüften Quellcode keine Umsetzung gefunden. |
 | Unverifiziert | 0 | Code ist vorhanden, aber der entscheidende Geräte- oder Anbieterablauf ist nicht ausreichend belegt. Bis zur Abnahme gibt es keine Punkte. |
 
-Berechnung: `(35 × 1 + 16 × 0,5 + 16 × 0 + 4 × 0) / 71 × 100 = 60,56 %`, gerundet **61 %**.
+Berechnung: `(36 × 1 + 16 × 0,5 + 15 × 0 + 4 × 0) / 71 × 100 = 61,97 %`, gerundet **62 %**.
 
 „Erfüllt“ bezieht sich jeweils auf den beschriebenen Nutzervorgang. Bekannte Einschränkungen bleiben in der Zeile sichtbar. Eine Zeile mit Quellcodebeleg allein ist kein zusätzlicher erfolgreicher Browser-, Geräte- oder Anbieter-Test. Bei den unverifizierten Punkten zählt der vorhandene Code bis zur entscheidenden praktischen Abnahme mit null.
 
@@ -32,14 +32,14 @@ Alle Kriterien zählen gleich viel. Die Quote misst deshalb weder Aufwand noch w
 | Projektstart und Workspace | 3 | 3 | 1 | 0 | 4,5 / 7 | 64,3 % |
 | Agent und Screen Planner | 3 | 3 | 4 | 0 | 4,5 / 10 | 45,0 % |
 | Widget-Baum und Struktur | 6 | 2 | 0 | 0 | 7 / 8 | 87,5 % |
-| Eigenschaften und Modifiers | 3 | 3 | 1 | 0 | 4,5 / 7 | 64,3 % |
+| Eigenschaften und Modifiers | 4 | 3 | 0 | 0 | 5,5 / 7 | 78,6 % |
 | Assets und Theme | 6 | 0 | 1 | 0 | 6 / 7 | 85,7 % |
 | Code-Editor und Dart-Werkzeuge | 4 | 1 | 1 | 0 | 4,5 / 6 | 75,0 % |
 | Vorschau und Gerätetests | 5 | 1 | 0 | 1 | 5,5 / 7 | 78,6 % |
 | Firebase und Supabase | 0 | 2 | 6 | 0 | 1 / 8 | 12,5 % |
 | Git und Änderungen | 3 | 0 | 1 | 0 | 3 / 4 | 75,0 % |
 | Export und Veröffentlichung | 2 | 1 | 1 | 3 | 2,5 / 7 | 35,7 % |
-| **Gesamt** | **35** | **16** | **16** | **4** | **43 / 71** | **61 %** |
+| **Gesamt** | **36** | **16** | **15** | **4** | **44 / 71** | **62 %** |
 
 ## Detailvergleich
 
@@ -94,7 +94,7 @@ Referenzlinks zeigen die am Stichtag gelesene öffentliche Dreamflow-Dokumentati
 | V03 | Vollständige Dart-Ausdrücke und Callbacks für einzelne Eigenschaften bearbeiten | **Erfüllt** | Ausdruckseditor, verschachtelte Felder, Reset, Dart-Prüfung und gezielte Quelländerung sind vorhanden. | [properties](https://docs.dreamflow.com/workspace/properties-panel/)<br>[src/visual/properties.rs](../src/visual/properties.rs), [web/src/property_panel.rs](../web/src/property_panel.rs)<br>Tests: `src/tests.rs::property_expressions_edit_callbacks_and_nested_values_without_replacing_other_source`; `src/tests.rs::property_expression_inputs_cannot_escape_the_selected_argument` |
 | V04 | Bedingungen und verschachtelte Wertezweige für beliebige Eigenschaften visuell aufbauen | **Teilweise** | Vorhandene unterstützte literale Zweige sind visuell editierbar; vollständige Bedingungs- und Zweigkonstruktion für beliebige Typen benötigt Dart. | [properties](https://docs.dreamflow.com/workspace/properties-panel/)<br>[src/visual.rs](../src/visual.rs), [web/src/view.rs](../web/src/view.rs)<br>Tests: `src/tests.rs::visual_conditional_values_keep_conditions_comments_and_other_branches` |
 | V05 | Beliebige Listen- und Objektwerte mit passenden strukturierten Editoren bearbeiten | **Teilweise** | Kindlisten und einige verschachtelte Konstruktorfelder sind unterstützt; kein allgemeiner visueller Collection-/Objekt-Editor. | [properties](https://docs.dreamflow.com/workspace/properties-panel/)<br>[web/src/property_panel.rs](../web/src/property_panel.rs), [src/visual/properties.rs](../src/visual/properties.rs), [src/visual.rs](../src/visual.rs)<br>Belegstufe: Quellcodeprüfung; siehe Prüfgrenzen. |
-| V06 | Den Konstruktor eines vorhandenen Widgets per Auswahl wechseln | **Fehlt** | Benannte Konstruktoren können neu eingefügt werden. Ein bestehendes Widget lässt sich nicht über einen Constructor-Schalter umstellen und abgleichen. | [properties](https://docs.dreamflow.com/workspace/properties-panel/)<br>[web/src/property_panel.rs](../web/src/property_panel.rs), [web/src/widget_library.rs](../web/src/widget_library.rs)<br>Belegstufe: Quellcodeprüfung; siehe Prüfgrenzen. |
+| V06 | Den Konstruktor eines vorhandenen Widgets per Auswahl wechseln | **Erfüllt** | Eigenschaften zeigen alternative Konstruktoren der von Dart aufgelösten Widget-Klasse. Passende Werte werden übernommen, andere lassen sich neu zuordnen oder nach Bestätigung entfernen. Dart-Prüfung, Undo/Redo und MCP sind verfügbar. | [properties](https://docs.dreamflow.com/workspace/properties-panel/)<br>[web/src/widget_library/switching.rs](../web/src/widget_library/switching.rs), [src/widget_library/switching.rs](../src/widget_library/switching.rs), [src/visual/library/switching.rs](../src/visual/library/switching.rs), [src/mcp-tools.json](../src/mcp-tools.json)<br>Tests: `src/visual/library/switching.rs::switching_keeps_qualified_type_arguments_comments_and_utf16_selection`; `src/visual/library/switching.rs::switching_to_non_const_updates_enclosing_expressions_and_keeps_other_const_calls` |
 | V07 | Umgebende Modifiers im Eigenschaftspanel zusammengefasst hinzufügen und bearbeiten | **Erfüllt** | Modifiers verbindet das Basis-Widget mit erkannten Wrappern, öffnet deren Eigenschaftseditoren und fügt neue Wrapper hinzu. Direkte child-Ketten werden gruppiert. Andere Konstruktionen bleiben über ihre eigenen Baumknoten zugänglich. | [properties](https://docs.dreamflow.com/workspace/properties-panel/)<br>[web/src/view.rs](../web/src/view.rs), [web/src/lib.rs](../web/src/lib.rs), [src/visual.rs](../src/visual.rs)<br>Tests: `src/visual/library.rs::modifier_links_follow_only_direct_single_child_wrappers`; `src/visual/library.rs::spacing_modifier_preserves_its_existing_edge_insets_import` |
 
 ### Assets und Theme
@@ -168,8 +168,9 @@ Referenzlinks zeigen die am Stichtag gelesene öffentliche Dreamflow-Dokumentati
 
 ## Was bereits geprüft wurde — und was nicht
 
-- Quellcodeprüfung am 2026-11-23. Detailvergleich um die geprüften Änderungen an Wrap, Modifiers und Baumansichten aktualisiert.
-- Der Workflow prüft Rust und den Rust-WASM-Build unter Windows, Linux und macOS. Der lokale Lauf für den bewerteten Code umfasst 64 erfolgreiche Rust-Tests und den WASM-Build. [GitHub-Prüfungen](https://github.com/685/freeflow/actions/workflows/check.yml)
+- Quellcodeprüfung am 2026-11-23. Der geprüfte Konstruktorwechsel für vorhandene Widgets ergänzt den Detailvergleich.
+- Der Workflow prüft Rust und den Rust-WASM-Build unter Windows, Linux und macOS. Der lokale Lauf für den bewerteten Code umfasst 66 erfolgreiche Rust-Tests und den WASM-Build. [GitHub-Prüfungen](https://github.com/685/freeflow/actions/workflows/check.yml)
+- Konstruktorwechsel: Flutter- und generische Projekt-Widgets im Browser gewechselt, Kindargumente übernommen oder neu zugeordnet, Typfehler und veraltete Revisionen abgewiesen sowie exakt rückgängig gemacht und wiederholt. Gleichnamiges Paket-Widget über MCP gewechselt. Die laufende Flutter-Web-App zeigte die übernommenen Kinder und die Paketvariante.
 - Wrap und Modifiers: Im Browser Flutter-, Projekt- und Paket-Wrapper konfiguriert, bestehende Widget-Kommentare erhalten und Fehler vor dem Speichern abgewiesen. Typisierter appBar-Platz, alternative und positionale Kindparameter, Imports, MCP und exaktes Undo/Redo geprüft.
 - Baumansichten: Simplified und Detailed mit einer laufenden Flutter-Web-App und im Quellbaum geprüft. Ausgeblendete Wrapper bleiben beim Ziehen am Widget. Eigenschaftseditoren für erkannte Wrapper und die Dialogdarstellung bei 390 px geprüft.
 - Widget-Bibliothek: 674 Framework-Konstruktoren, Projekt- und Paket-Widgets, benannte Konstruktoren, Dart-Prüfung, Imports, genaue Undo/Redo-Wiederherstellung, veraltete Revisionen, MCP-Einfügen und lesender Agent-Zugriff geprüft.
@@ -188,7 +189,7 @@ Referenzlinks zeigen die am Stichtag gelesene öffentliche Dreamflow-Dokumentati
 
 ## Nächste Abnahmeschritte
 
-- **V06, V02, V05:** Konstruktorwechsel für bestehende Widgets und stärker SDK-gestützte Typ-/Collection-Editoren umsetzen und in realen Flutter-Dateien prüfen.
+- **V02, V05:** SDK-gestützte Typ-Editoren und strukturierte Editoren für Listen und Objekte ausbauen und in realen Flutter-Dateien prüfen.
 - **A02, A03, A08, A09:** Echten Widget-/Vorschau-Bildkontext, direkten Prompt Edit und visuelle Screen-/Theme-Planung ergänzen.
 - **B02, B03, B05, B06, B08:** Geführte Backend-Verwaltung und Deployment mit passenden Testprojekten aufbauen; reine Client-Initialisierung nicht als Gesamtintegration werten.
 - **R07, S03, S04, S05:** Offene Geräte- und Anbieterabnahmen auf echter Hardware beziehungsweise Testkonten durchführen, sobald die benötigte Umgebung vorhanden ist.

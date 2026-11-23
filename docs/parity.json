@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "baselineVersion": "1.0",
   "date": "2026-11-23",
-  "evaluatedCodeCommit": "76fd26a3de12c152043c2172a29f274ea06918d2",
+  "evaluatedCodeCommit": "003fc8a4cf1f1e142a06d71e09bb6d4fa102182c",
   "target": "Öffentlich dokumentierte Dreamflow-Funktionen",
   "method": {
     "unit": "Ein Abnahmepunkt pro aufgeführtem Nutzervorgang; alle Punkte gleich gewichtet.",
@@ -40,10 +40,11 @@
     "prepublish": "https://docs.dreamflow.com/publish/pre-checks-before-publishing/"
   },
   "verification": {
-    "review": "Quellcodeprüfung am 2026-11-23. Detailvergleich um die geprüften Änderungen an Wrap, Modifiers und Baumansichten aktualisiert.",
+    "review": "Quellcodeprüfung am 2026-11-23. Der geprüfte Konstruktorwechsel für vorhandene Widgets ergänzt den Detailvergleich.",
     "ci": "https://github.com/685/freeflow/actions/workflows/check.yml",
-    "ciScope": "Der Workflow prüft Rust und den Rust-WASM-Build unter Windows, Linux und macOS. Der lokale Lauf für den bewerteten Code umfasst 64 erfolgreiche Rust-Tests und den WASM-Build.",
+    "ciScope": "Der Workflow prüft Rust und den Rust-WASM-Build unter Windows, Linux und macOS. Der lokale Lauf für den bewerteten Code umfasst 66 erfolgreiche Rust-Tests und den WASM-Build.",
     "existingRuntimeEvidence": [
+      "Konstruktorwechsel: Flutter- und generische Projekt-Widgets im Browser gewechselt, Kindargumente übernommen oder neu zugeordnet, Typfehler und veraltete Revisionen abgewiesen sowie exakt rückgängig gemacht und wiederholt. Gleichnamiges Paket-Widget über MCP gewechselt. Die laufende Flutter-Web-App zeigte die übernommenen Kinder und die Paketvariante.",
       "Wrap und Modifiers: Im Browser Flutter-, Projekt- und Paket-Wrapper konfiguriert, bestehende Widget-Kommentare erhalten und Fehler vor dem Speichern abgewiesen. Typisierter appBar-Platz, alternative und positionale Kindparameter, Imports, MCP und exaktes Undo/Redo geprüft.",
       "Baumansichten: Simplified und Detailed mit einer laufenden Flutter-Web-App und im Quellbaum geprüft. Ausgeblendete Wrapper bleiben beim Ziehen am Widget. Eigenschaftseditoren für erkannte Wrapper und die Dialogdarstellung bei 390 px geprüft.",
       "Widget-Bibliothek: 674 Framework-Konstruktoren, Projekt- und Paket-Widgets, benannte Konstruktoren, Dart-Prüfung, Imports, genaue Undo/Redo-Wiederherstellung, veraltete Revisionen, MCP-Einfügen und lesender Agent-Zugriff geprüft.",
@@ -117,7 +118,7 @@
         { "id": "V03", "criterion": "Vollständige Dart-Ausdrücke und Callbacks für einzelne Eigenschaften bearbeiten", "status": "implemented", "sources": ["properties"], "code": ["src/visual/properties.rs", "web/src/property_panel.rs"], "checks": ["src/tests.rs::property_expressions_edit_callbacks_and_nested_values_without_replacing_other_source", "src/tests.rs::property_expression_inputs_cannot_escape_the_selected_argument"], "note": "Ausdruckseditor, verschachtelte Felder, Reset, Dart-Prüfung und gezielte Quelländerung sind vorhanden." },
         { "id": "V04", "criterion": "Bedingungen und verschachtelte Wertezweige für beliebige Eigenschaften visuell aufbauen", "status": "partial", "sources": ["properties"], "code": ["src/visual.rs", "web/src/view.rs"], "checks": ["src/tests.rs::visual_conditional_values_keep_conditions_comments_and_other_branches"], "note": "Vorhandene unterstützte literale Zweige sind visuell editierbar; vollständige Bedingungs- und Zweigkonstruktion für beliebige Typen benötigt Dart." },
         { "id": "V05", "criterion": "Beliebige Listen- und Objektwerte mit passenden strukturierten Editoren bearbeiten", "status": "partial", "sources": ["properties"], "code": ["web/src/property_panel.rs", "src/visual/properties.rs", "src/visual.rs"], "checks": [], "note": "Kindlisten und einige verschachtelte Konstruktorfelder sind unterstützt; kein allgemeiner visueller Collection-/Objekt-Editor." },
-        { "id": "V06", "criterion": "Den Konstruktor eines vorhandenen Widgets per Auswahl wechseln", "status": "missing", "sources": ["properties"], "code": ["web/src/property_panel.rs", "web/src/widget_library.rs"], "checks": [], "note": "Benannte Konstruktoren können neu eingefügt werden. Ein bestehendes Widget lässt sich nicht über einen Constructor-Schalter umstellen und abgleichen." },
+        { "id": "V06", "criterion": "Den Konstruktor eines vorhandenen Widgets per Auswahl wechseln", "status": "implemented", "sources": ["properties"], "code": ["web/src/widget_library/switching.rs", "src/widget_library/switching.rs", "src/visual/library/switching.rs", "src/mcp-tools.json"], "checks": ["src/visual/library/switching.rs::switching_keeps_qualified_type_arguments_comments_and_utf16_selection", "src/visual/library/switching.rs::switching_to_non_const_updates_enclosing_expressions_and_keeps_other_const_calls"], "note": "Eigenschaften zeigen alternative Konstruktoren der von Dart aufgelösten Widget-Klasse. Passende Werte werden übernommen, andere lassen sich neu zuordnen oder nach Bestätigung entfernen. Dart-Prüfung, Undo/Redo und MCP sind verfügbar." },
         { "id": "V07", "criterion": "Umgebende Modifiers im Eigenschaftspanel zusammengefasst hinzufügen und bearbeiten", "status": "implemented", "sources": ["properties"], "code": ["web/src/view.rs", "web/src/lib.rs", "src/visual.rs"], "checks": ["src/visual/library.rs::modifier_links_follow_only_direct_single_child_wrappers", "src/visual/library.rs::spacing_modifier_preserves_its_existing_edge_insets_import"], "note": "Modifiers verbindet das Basis-Widget mit erkannten Wrappern, öffnet deren Eigenschaftseditoren und fügt neue Wrapper hinzu. Direkte child-Ketten werden gruppiert. Andere Konstruktionen bleiben über ihre eigenen Baumknoten zugänglich." }
       ]
     },
@@ -192,7 +193,7 @@
     }
   ],
   "nextAcceptanceWork": [
-    { "ids": ["V06", "V02", "V05"], "action": "Konstruktorwechsel für bestehende Widgets und stärker SDK-gestützte Typ-/Collection-Editoren umsetzen und in realen Flutter-Dateien prüfen." },
+    { "ids": ["V02", "V05"], "action": "SDK-gestützte Typ-Editoren und strukturierte Editoren für Listen und Objekte ausbauen und in realen Flutter-Dateien prüfen." },
     { "ids": ["A02", "A03", "A08", "A09"], "action": "Echten Widget-/Vorschau-Bildkontext, direkten Prompt Edit und visuelle Screen-/Theme-Planung ergänzen." },
     { "ids": ["B02", "B03", "B05", "B06", "B08"], "action": "Geführte Backend-Verwaltung und Deployment mit passenden Testprojekten aufbauen; reine Client-Initialisierung nicht als Gesamtintegration werten." },
     { "ids": ["R07", "S03", "S04", "S05"], "action": "Offene Geräte- und Anbieterabnahmen auf echter Hardware beziehungsweise Testkonten durchführen, sobald die benötigte Umgebung vorhanden ist." }
