@@ -11,6 +11,7 @@ mod components;
 mod design;
 pub(crate) mod library;
 mod properties;
+pub(crate) mod values;
 pub(crate) use components::Scope;
 pub(crate) use components::component_at;
 pub(crate) use design::import_reference;

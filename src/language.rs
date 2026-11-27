@@ -111,7 +111,7 @@ impl Analyzers {
                 | "definition"
                 | "references"
                 | "hover"
-        ) || saved && action == "definition-paths")
+        ) || saved && matches!(action, "definition-paths" | "enum-values" | "icon-values"))
         {
             return Err(Problem::new(400, "Choose a Dart editor action."));
         }
@@ -303,7 +303,10 @@ impl Analyzer {
                         "general":{"positionEncodings":["utf-16"]},
                         "textDocument":{
                             "publishDiagnostics":{"versionSupport":true},
-                            "completion":{"completionItem":{"snippetSupport":false}},
+                            "completion":{
+                                "completionItem":{"snippetSupport":false},
+                                "completionItemKind":{"valueSet":(1..=25).collect::<Vec<_>>()}
+                            },
                             "hover":{"contentFormat":["plaintext"]},
                             "definition":{"linkSupport":true}
                         }
@@ -484,16 +487,21 @@ impl Analyzer {
                 let values = self.documents[uri].diagnostics.as_ref().unwrap();
                 Ok(json!({"diagnostics":diagnostics(values)}))
             }
-            "complete" | "properties" => {
+            "complete" | "properties" | "enum-values" | "icon-values" => {
                 let mut result = self
                     .request("textDocument/completion", params.clone())
                     .await?;
                 let prefix = input_prefix(text, position).unwrap_or_default();
-                let mut items = completions(&result, prefix, action == "properties");
+                let read = |result: &Value| match action {
+                    "enum-values" => constant_labels(result, false),
+                    "icon-values" => constant_labels(result, true),
+                    _ => completions(result, prefix, action == "properties"),
+                };
+                let mut items = read(&result);
                 if items.is_empty() && self.documents[uri].diagnostics.is_none() {
                     self.wait_for_diagnostics(uri).await?;
                     result = self.request("textDocument/completion", params).await?;
-                    items = completions(&result, prefix, action == "properties");
+                    items = read(&result);
                 }
                 Ok(json!({"items":items}))
             }
@@ -650,6 +658,30 @@ fn completions(result: &Value, prefix: &str, properties: bool) -> Vec<Value> {
         .into_iter()
         .take(if properties { 200 } else { 40 })
         .map(|(_, _, item)| item)
+        .collect()
+}
+
+fn constant_labels(result: &Value, icons: bool) -> Vec<Value> {
+    result
+        .as_array()
+        .or_else(|| result["items"].as_array())
+        .into_iter()
+        .flatten()
+        .filter(|item| {
+            if icons {
+                matches!(item["kind"].as_u64(), Some(5 | 21)) && item["detail"] == "IconData"
+            } else {
+                item["kind"] == 20
+            }
+        })
+        .filter_map(|item| clip(&item["label"], 128))
+        .filter(|label| {
+            label
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'$'))
+        })
+        .take(if icons { 10000 } else { 250 })
+        .map(Value::String)
         .collect()
 }
 

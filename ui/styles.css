@@ -294,6 +294,13 @@ svg { display: block; flex-shrink: 0; }
 .property-toolbar { display: grid; gap: 8px; padding: 12px 13px; border-bottom: 1px solid var(--border); }
 .property-toolbar input { width: 100%; min-width: 0; font-size: 12px; }
 .property-toolbar button { justify-self: start; }
+.value-caption { display: flex; align-items: baseline; flex-wrap: wrap; gap: 8px; margin: 0; }
+.value-caption code, .value-rows > code { color: var(--muted); overflow-wrap: anywhere; }
+.value-rows { display: grid; gap: 9px; }
+.value-rows > button, .value-row > button { justify-self: start; }
+.value-row { display: grid; gap: 7px; min-width: 0; padding: 8px 10px 10px; margin: 0; border: 1px solid var(--border); border-radius: 8px; }
+.value-row legend { padding-inline: 4px; color: var(--muted); }
+.value-row-tools { display: flex; flex-wrap: wrap; gap: 5px; }
 .property-card { margin-bottom: 10px; }
 .property-card:last-child { margin-bottom: 0; }
 .property-card > .property { margin-bottom: 2px; }

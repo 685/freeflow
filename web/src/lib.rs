@@ -410,14 +410,18 @@ pub async fn visual_edit_at(
         json!({"path":path,"revision":revision,"command":command}),
     )
     .await?;
+    refresh_visual_edit(&project, &path, string(&command["id"]), saved).await
+}
+
+async fn refresh_visual_edit(project: &str, path: &str, widget: &str, saved: Value) -> Result {
     if state::read(|state| state.project_id() == project && state.file == path) {
         state::change(|state| {
-            if state.mode.shows_code() && !state.drafts.contains_key(&state.draft_key(&path)) {
+            if state.mode.shows_code() && !state.drafts.contains_key(&state.draft_key(path)) {
                 editor::set(string(&saved["content"]), true, true);
             }
             state.source = saved;
         });
-        update_visual(&project, &path, string(&command["id"])).await?;
+        update_visual(project, path, widget).await?;
     }
     Ok(())
 }

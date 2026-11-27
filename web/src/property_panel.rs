@@ -6,6 +6,8 @@ use crate::{
 use serde_json::{Value, json};
 use std::cell::RefCell;
 
+pub(crate) mod values;
+
 thread_local! { static SEARCH: RefCell<String> = RefCell::default(); }
 
 #[derive(Clone)]
@@ -414,6 +416,7 @@ pub async fn act(context: &Context, version: u64, action: &str) -> Result {
 }
 
 pub fn initialize() {
+    values::initialize();
     dom::listen(&id("modal-body"), "input", |event| {
         if let Some(field) = dom::target(&event).filter(|field| field.id() == "asset-picker-search")
         {
@@ -467,6 +470,12 @@ pub fn initialize() {
                     .unwrap_or_default(),
                 element
                     .get_attribute("data-asset-category")
+                    .unwrap_or_default(),
+            ));
+        } else if let Some(element) = dom::closest(&event, "[data-property-value]") {
+            dom::spawn(values::open(
+                element
+                    .get_attribute("data-property-value")
                     .unwrap_or_default(),
             ));
         } else if let Some(element) = dom::closest(&event, "[data-property-code]") {

@@ -351,6 +351,9 @@ fn property(item: &Value) -> String {
         tools.push_str(&format!(r#"<button type="button" class="property-code" data-property-theme="{}" data-design-kind="{design_kind}" aria-label="Choose {} from Theme">{}Theme</button>"#,h(name),h(name),icon("palette",12)));
     }
     if item["codeEditable"] == true {
+        if item["editable"] != true && !item["conditional"].is_object() {
+            tools.push_str(&format!(r#"<button type="button" class="property-code" data-property-value="{}" aria-label="Edit {} value">Edit value</button>"#, h(name), h(name)));
+        }
         tools.push_str(&format!(r#"<button type="button" class="property-code" data-property-code="{}" aria-label="Edit {} as Dart" title="Edit Dart expression">{}Dart</button>"#, h(name), h(name), icon("code", 12)));
     }
     if item["removable"] == true {
@@ -572,7 +575,7 @@ pub fn inspector(state: &State) {
     content.push_str(&crate::widget_clipboard::controls(node, false));
     content.push_str(&crate::component_panel::controls(node, false));
     content.push_str(&modifiers(state, node));
-    content.push_str(&format!(r#"<div class="property-toolbar"><input id="property-search" type="search" aria-label="Search properties" placeholder="Search properties…" value="{}"><button type="button" class="button outline small" data-property-code="">{}Add property</button></div>"#, h(&crate::property_panel::search()), icon("plus", 14)));
+    content.push_str(&format!(r#"<div class="property-toolbar"><input id="property-search" type="search" aria-label="Search properties" placeholder="Search properties…" value="{}"><button type="button" class="button outline small" data-property-value="">{}Add property</button></div>"#, h(&crate::property_panel::search()), icon("plus", 14)));
     if rendered {
         content.push_str(r#"<p class="inspect-note">Edits apply to every instance created by this Dart constructor.</p>"#);
     }

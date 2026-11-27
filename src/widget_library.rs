@@ -701,7 +701,7 @@ fn source(projects: &Projects, project: &Project, input: &Value) -> Result<files
     Ok(file)
 }
 
-async fn signature(
+pub(crate) async fn signature(
     jobs: &Jobs,
     project: &Project,
     path: &str,

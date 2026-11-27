@@ -49,6 +49,7 @@ pub(crate) struct Call<'a> {
     pub id: &'a str,
     pub class: &'a str,
     pub constructor: &'a str,
+    pub namespace: String,
     pub symbol: usize,
     pub arguments: Vec<Argument<'a>>,
     start: usize,
@@ -66,12 +67,8 @@ impl<'a> Call<'a> {
         let (tokens, nodes) = inspect_in(source, scope)?;
         let node = selected_node(&nodes, id)?;
         let first = node.start + usize::from(matches!(at(&tokens, node.start), "const" | "new"));
-        let kind = first
-            + if node.namespace(&tokens).is_empty() {
-                0
-            } else {
-                2
-            };
+        let namespace = node.namespace(&tokens);
+        let kind = first + if namespace.is_empty() { 0 } else { 2 };
         let raw_name = node.constructor;
         let suffix = (!raw_name.is_empty()).then(|| {
             let dot = &tokens[node.open - 2];
@@ -118,6 +115,7 @@ impl<'a> Call<'a> {
             id,
             class: node.kind,
             constructor: if raw_name == "new" { "" } else { raw_name },
+            namespace,
             symbol: source[..symbol].encode_utf16().count(),
             arguments,
             start: tokens[node.start].start,

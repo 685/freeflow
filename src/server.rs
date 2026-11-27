@@ -623,7 +623,7 @@ async fn project_route(
                 crate::components::navigate(jobs, &project, &input).await?,
             ),
             "widget-snippet" => (200, widget_snippet(projects, &project, &input)?),
-            "widget-property" => {
+            "widget-property" | "widget-property-save" => {
                 let path = required(&input, "path")?;
                 if !path.ends_with(".dart") {
                     return Err(Problem::new(400, "Select a Dart file."));
@@ -637,7 +637,12 @@ async fn project_route(
                 }
                 let id = required(&input, "id")?;
                 let scope = visual::Scope::for_source(projects, &project, path, &source.content);
-                let mut result = match input["action"].as_str().unwrap_or("read") {
+                let action = if part == "widget-property-save" {
+                    "value-save"
+                } else {
+                    input["action"].as_str().unwrap_or("read")
+                };
+                let mut result = match action {
                     "read" => visual::property_details_in(
                         &source.content,
                         id,
@@ -648,6 +653,22 @@ async fn project_route(
                         let (text, offset) =
                             visual::property_completion_in(&source.content, id, &scope)?;
                         jobs.analyzers.editor(jobs, &project, &json!({"action":"properties","path":path,"text":text,"offset":offset})).await?
+                    }
+                    "parameters" => {
+                        crate::property_values::parameters(jobs, &project, &source, id, &scope)
+                            .await?
+                    }
+                    "value-model" => {
+                        crate::property_values::model(jobs, &project, &source, &input, &scope)
+                            .await?
+                    }
+                    "value-check" => {
+                        crate::property_values::edit(jobs, &project, &source, &input, &scope, false)
+                            .await?
+                    }
+                    "value-save" if part == "widget-property-save" => {
+                        crate::property_values::edit(jobs, &project, &source, &input, &scope, true)
+                            .await?
                     }
                     "check" => {
                         let code = visual::edit_in(
@@ -664,10 +685,7 @@ async fn project_route(
                             .await?
                     }
                     _ => {
-                        return Err(Problem::new(
-                            400,
-                            "Choose read, suggest or check for the property.",
-                        ));
+                        return Err(Problem::new(400, "Choose a property editor action."));
                     }
                 };
                 result["revision"] = json!(source.revision);

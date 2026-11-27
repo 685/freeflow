@@ -19,6 +19,7 @@ mod preview;
 mod processes;
 mod project_rules;
 mod projects;
+mod property_values;
 mod server;
 mod signing;
 mod stores;
