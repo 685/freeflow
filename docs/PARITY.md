@@ -1,10 +1,10 @@
 # Freeflow ↔ Dreamflow: Vergleichsbasis 1.0
 
-**Stand: 2026-11-28 · Bewerteter Funktionsstand: [32baad4](https://github.com/685/freeflow/commit/32baad412502f4dee7b64b384d6b1ca4740d7597)**
+**Stand: 2026-11-28 · Bewerteter Funktionsstand: [bf0f60e](https://github.com/685/freeflow/commit/bf0f60e4990c7fd3843bda78fba32ed3dc55867f)**
 
-**Arbeitsquote: 73 %** — 51,5 von 71 gleich gewichteten Punkten.
+**Arbeitsquote: 73 %** — 52 von 71 gleich gewichteten Punkten.
 
-43 erfüllt · 17 teilweise · 9 fehlend · 2 unverifiziert.
+44 erfüllt · 16 teilweise · 9 fehlend · 2 unverifiziert.
 
 Diese Zahl ist die nachvollziehbare Bewertung der folgenden öffentlichen Vergleichsliste. Sie ist keine Behauptung, dass exakt derselbe Anteil des gesamten Dreamflow-Produkts fertig ist. Eine vollständige Gegenprüfung in einer angemeldeten Dreamflow-Sitzung, identische Modellqualität, identisches Aussehen und verbleibender Zeitaufwand wurden nicht gemessen.
 
@@ -19,7 +19,7 @@ Die Basis umfasst Projektstart, Workspace, Agent, Planung, visuellen Editor, Vor
 | Fehlt | 0 | Für den beschriebenen integrierten Vorgang wurde im geprüften Quellcode keine Umsetzung gefunden. |
 | Unverifiziert | 0 | Code ist vorhanden, aber der entscheidende Geräte- oder Anbieterablauf ist nicht ausreichend belegt. Bis zur Abnahme gibt es keine Punkte. |
 
-Berechnung: `(43 × 1 + 17 × 0,5 + 9 × 0 + 2 × 0) / 71 × 100 = 72,54 %`, gerundet **73 %**.
+Berechnung: `(44 × 1 + 16 × 0,5 + 9 × 0 + 2 × 0) / 71 × 100 = 73,24 %`, gerundet **73 %**.
 
 „Erfüllt“ bezieht sich jeweils auf den beschriebenen Nutzervorgang. Bekannte Einschränkungen bleiben in der Zeile sichtbar. Eine Zeile mit Quellcodebeleg allein ist kein zusätzlicher erfolgreicher Browser-, Geräte- oder Anbieter-Test. Bei den unverifizierten Punkten zählt der vorhandene Code bis zur entscheidenden praktischen Abnahme mit null.
 
@@ -29,7 +29,7 @@ Alle Kriterien zählen gleich viel. Die Quote misst deshalb weder Aufwand noch w
 
 | Bereich | Erfüllt | Teilweise | Fehlt | Unverifiziert | Punkte | Quote |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| Projektstart und Workspace | 3 | 3 | 1 | 0 | 4,5 / 7 | 64,3 % |
+| Projektstart und Workspace | 4 | 2 | 1 | 0 | 5 / 7 | 71,4 % |
 | Agent und Screen Planner | 6 | 3 | 1 | 0 | 7,5 / 10 | 75,0 % |
 | Widget-Baum und Struktur | 6 | 2 | 0 | 0 | 7 / 8 | 87,5 % |
 | Eigenschaften und Modifiers | 4 | 3 | 0 | 0 | 5,5 / 7 | 78,6 % |
@@ -39,7 +39,7 @@ Alle Kriterien zählen gleich viel. Die Quote misst deshalb weder Aufwand noch w
 | Firebase und Supabase | 0 | 2 | 6 | 0 | 1 / 8 | 12,5 % |
 | Git und Änderungen | 4 | 0 | 0 | 0 | 4 / 4 | 100,0 % |
 | Export und Veröffentlichung | 4 | 1 | 0 | 2 | 4,5 / 7 | 64,3 % |
-| **Gesamt** | **43** | **17** | **9** | **2** | **51,5 / 71** | **73 %** |
+| **Gesamt** | **44** | **16** | **9** | **2** | **52 / 71** | **73 %** |
 
 ## Detailvergleich
 
@@ -50,7 +50,7 @@ Referenzlinks zeigen die am Stichtag gelesene öffentliche Dreamflow-Dokumentati
 | ID | Abnahmepunkt | Status | Stand und Lücke | Referenz und Freeflow-Belege |
 | --- | --- | --- | --- | --- |
 | P01 | Leeres Flutter-Projekt erstellen und wieder öffnen | **Erfüllt** | Blank-Projekt und Projektverwaltung sind vorhanden; lokale Toolchain statt Cloud-Sitzung. | [quickstart](https://docs.dreamflow.com/quickstart/)<br>[src/projects.rs](../src/projects.rs), [web/src/dialogs.rs](../web/src/dialogs.rs)<br>Tests: `src/tests.rs::legacy_project_metadata_and_settings_open_without_conversion` |
-| P02 | Neue App direkt aus Text- oder Bildprompt starten | **Teilweise** | Agent kann ein angelegtes Projekt bearbeiten und Bilder erhalten; ein durchgehender Prompt-zuerst-Startdialog fehlt. | [quickstart](https://docs.dreamflow.com/quickstart/)<br>[src/projects.rs](../src/projects.rs), [web/src/agent_panel.rs](../web/src/agent_panel.rs)<br>Belegstufe: Quellcodeprüfung; siehe Prüfgrenzen. |
+| P02 | Neue App direkt aus Text- oder Bildprompt starten | **Erfüllt** | Der Projektstart akzeptiert eine Beschreibung oder ein Referenzbild und übergibt den Auftrag direkt an den konfigurierten Agenten. Beide Varianten wurden mit echten Flutter-Projekten und einem simulierten Modellanbieter geprüft. Ohne Anbieter bleibt der Auftrag im Composer. | [quickstart](https://docs.dreamflow.com/quickstart/)<br>[web/src/dialogs.rs](../web/src/dialogs.rs), [web/src/lib.rs](../web/src/lib.rs), [web/src/agent_panel.rs](../web/src/agent_panel.rs), [src/jobs.rs](../src/jobs.rs) |
 | P03 | Aus einer Auswahl ausgearbeiteter App-Vorlagen starten | **Teilweise** | Zwei Starter: Daymark und Blank. Keine vergleichbar breite Vorlagenauswahl belegt; Designqualität wird nicht als gleich bewertet. | [quickstart](https://docs.dreamflow.com/quickstart/)<br>[templates/catalog.json](../templates/catalog.json), [src/projects.rs](../src/projects.rs)<br>Belegstufe: Quellcodeprüfung; siehe Prüfgrenzen. |
 | P04 | Zwischen Vorschau, Code und Split sowie Arbeitsbereichen wechseln | **Erfüllt** | Design-, Code-, Split- und Plan-Modus sowie Panel-Steuerung sind vorhanden. | [workspace](https://docs.dreamflow.com/workspace/), [content](https://docs.dreamflow.com/workspace/content-panel/)<br>[web/src/state.rs](../web/src/state.rs), [web/src/view.rs](../web/src/view.rs), [web/src/lib.rs](../web/src/lib.rs)<br>Belegstufe: Quellcodeprüfung; siehe Prüfgrenzen. |
 | P05 | Gespeicherte Projektänderungen gemeinsam rückgängig machen und wiederholen | **Erfüllt** | Gruppierte Undo/Redo-Abläufe funktionieren. Laufendes Sitzungshistorium und dauerhafte Dateiversionen sind unterschiedliche Funktionen. | [workspace](https://docs.dreamflow.com/workspace/)<br>[src/edits.rs](../src/edits.rs), [web/src/saved_edits.rs](../web/src/saved_edits.rs)<br>Tests: `src/tests.rs::saved_multi_file_edits_replay_together_and_reject_external_changes_before_writing`; `src/tests.rs::saved_visual_edits_undo_redo_exact_source_and_branch_after_a_new_edit` |
@@ -152,7 +152,7 @@ Referenzlinks zeigen die am Stichtag gelesene öffentliche Dreamflow-Dokumentati
 | G01 | Repository verbinden, Änderungen und Diffs prüfen, stagen und committen | **Erfüllt** | Integrierte Git-Aktionen und Oberfläche vorhanden; Authentifizierung verwendet die lokal konfigurierten Git-Zugangsdaten. | [git](https://docs.dreamflow.com/integrations/git/)<br>[src/git.rs](../src/git.rs), [web/src/source_control.rs](../web/src/source_control.rs)<br>Belegstufe: Quellcodeprüfung; siehe Prüfgrenzen. |
 | G02 | Branches erstellen/wechseln sowie Fetch, Pull und Push ausführen | **Erfüllt** | Branch-/Tracking-/Sync-Aktionen sind im Code vorhanden; Anbieter-Tokenverwaltung erfolgt über das lokale Git-System. | [git](https://docs.dreamflow.com/integrations/git/)<br>[src/git.rs](../src/git.rs), [web/src/source_control.rs](../web/src/source_control.rs)<br>Belegstufe: Quellcodeprüfung; siehe Prüfgrenzen. |
 | G03 | Git-Konflikte vergleichen, eine Seite übernehmen oder manuell lösen | **Erfüllt** | Konfliktansicht, lokale/eingehende Seite, Code-Bearbeitung, Stage/Mark resolved und Merge-Abbruch sind vorhanden. | [git](https://docs.dreamflow.com/integrations/git/)<br>[src/git.rs](../src/git.rs), [web/src/source_control.rs](../web/src/source_control.rs)<br>Belegstufe: Quellcodeprüfung; siehe Prüfgrenzen. |
-| G04 | Eine Commit-Nachricht direkt in der Versionskontrolle mit KI vorschlagen lassen | **Erfüllt** | Die KI entwirft einen Commit-Betreff aus dem vorgemerkten Diff. Abnahme im Browser mit echtem Git-Index und simuliertem Anbieter. Private und ungestagte Änderungen fehlten im Modellkontext. Index und HEAD blieben bis zum Commit unverändert. | [git](https://docs.dreamflow.com/integrations/git/)<br>[src/git.rs](../src/git.rs), [web/src/source_control.rs](../web/src/source_control.rs) |
+| G04 | Eine Commit-Nachricht direkt in der Versionskontrolle mit KI vorschlagen lassen | **Erfüllt** | Die KI entwirft einen Commit-Betreff aus dem vorgemerkten Diff. Abnahme im Browser mit echtem Git-Index und simuliertem Anbieter. Nur freigegebene, vorgemerkte Änderungen gingen in den Modellkontext ein. Der Vorschlag ließ Index und HEAD unverändert. | [git](https://docs.dreamflow.com/integrations/git/)<br>[src/git.rs](../src/git.rs), [web/src/source_control.rs](../web/src/source_control.rs) |
 
 ### Export und Veröffentlichung
 
@@ -168,8 +168,9 @@ Referenzlinks zeigen die am Stichtag gelesene öffentliche Dreamflow-Dokumentati
 
 ## Was bereits geprüft wurde — und was nicht
 
-- Quellcodeprüfung am 2026-11-28. Agent, Screen Planner, Git und native Android-Exporte in der Vergleichsliste aktualisiert.
+- Quellcodeprüfung am 2026-11-28. Projektstart, Agent, Screen Planner, Git und native Android-Exporte in der Vergleichsliste aktualisiert.
 - Der Workflow prüft Rust und den Rust-WASM-Build unter Windows, Linux und macOS. Der lokale Lauf für den bewerteten Code umfasst 69 erfolgreiche Rust-Tests und den WASM-Build. [GitHub-Prüfungen](https://github.com/685/freeflow/actions/workflows/check.yml)
+- Der Startdialog erzeugte per Text und per Bild jeweils ein Flutter-Projekt und startete den Agenten. Die Dart-Speicherung und die Vorschau eines generierten Projekts liefen mit Flutter. Die Modellantworten kamen von einem lokalen Testanbieter. Ohne konfigurierten Anbieter blieb der Auftrag samt Bild erhalten.
 - Prompt Edit in Quellbaum und laufender Flutter-Web-Vorschau, gespeicherte Agent-Unterhaltungen und KI-Commit-Vorschläge im Browser geprüft. Ein lokaler OpenAI-kompatibler Testanbieter lieferte kontrollierte Antworten.
 - Theme-Presets, eigene Farben und Typografie im Screen Planner gespeichert und an die Generierung übergeben.
 - Flutter 3.38.10 und Gradle erzeugten im gleichen Testlauf adaptive Android-Icons und das iOS-AppIcon-Set. Separat wurden das exportierte APK im Emulator installiert und die Signatur des exportierten AAB mit dem Testzertifikat geprüft.

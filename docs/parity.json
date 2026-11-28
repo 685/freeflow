@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "baselineVersion": "1.0",
   "date": "2026-11-28",
-  "evaluatedCodeCommit": "32baad412502f4dee7b64b384d6b1ca4740d7597",
+  "evaluatedCodeCommit": "bf0f60e4990c7fd3843bda78fba32ed3dc55867f",
   "target": "Öffentlich dokumentierte Dreamflow-Funktionen",
   "method": {
     "unit": "Ein Abnahmepunkt pro aufgeführtem Nutzervorgang; alle Punkte gleich gewichtet.",
@@ -40,10 +40,11 @@
     "prepublish": "https://docs.dreamflow.com/publish/pre-checks-before-publishing/"
   },
   "verification": {
-    "review": "Quellcodeprüfung am 2026-11-28. Agent, Screen Planner, Git und native Android-Exporte in der Vergleichsliste aktualisiert.",
+    "review": "Quellcodeprüfung am 2026-11-28. Projektstart, Agent, Screen Planner, Git und native Android-Exporte in der Vergleichsliste aktualisiert.",
     "ci": "https://github.com/685/freeflow/actions/workflows/check.yml",
     "ciScope": "Der Workflow prüft Rust und den Rust-WASM-Build unter Windows, Linux und macOS. Der lokale Lauf für den bewerteten Code umfasst 69 erfolgreiche Rust-Tests und den WASM-Build.",
     "existingRuntimeEvidence": [
+      "Der Startdialog erzeugte per Text und per Bild jeweils ein Flutter-Projekt und startete den Agenten. Die Dart-Speicherung und die Vorschau eines generierten Projekts liefen mit Flutter. Die Modellantworten kamen von einem lokalen Testanbieter. Ohne konfigurierten Anbieter blieb der Auftrag samt Bild erhalten.",
       "Prompt Edit in Quellbaum und laufender Flutter-Web-Vorschau, gespeicherte Agent-Unterhaltungen und KI-Commit-Vorschläge im Browser geprüft. Ein lokaler OpenAI-kompatibler Testanbieter lieferte kontrollierte Antworten.",
       "Theme-Presets, eigene Farben und Typografie im Screen Planner gespeichert und an die Generierung übergeben.",
       "Flutter 3.38.10 und Gradle erzeugten im gleichen Testlauf adaptive Android-Icons und das iOS-AppIcon-Set. Separat wurden das exportierte APK im Emulator installiert und die Signatur des exportierten AAB mit dem Testzertifikat geprüft.",
@@ -82,7 +83,7 @@
       "id": "project", "name": "Projektstart und Workspace",
       "criteria": [
         { "id": "P01", "criterion": "Leeres Flutter-Projekt erstellen und wieder öffnen", "status": "implemented", "sources": ["quickstart"], "code": ["src/projects.rs", "web/src/dialogs.rs"], "checks": ["src/tests.rs::legacy_project_metadata_and_settings_open_without_conversion"], "note": "Blank-Projekt und Projektverwaltung sind vorhanden; lokale Toolchain statt Cloud-Sitzung." },
-        { "id": "P02", "criterion": "Neue App direkt aus Text- oder Bildprompt starten", "status": "partial", "sources": ["quickstart"], "code": ["src/projects.rs", "web/src/agent_panel.rs"], "checks": [], "note": "Agent kann ein angelegtes Projekt bearbeiten und Bilder erhalten; ein durchgehender Prompt-zuerst-Startdialog fehlt." },
+        { "id": "P02", "criterion": "Neue App direkt aus Text- oder Bildprompt starten", "status": "implemented", "sources": ["quickstart"], "code": ["web/src/dialogs.rs", "web/src/lib.rs", "web/src/agent_panel.rs", "src/jobs.rs"], "checks": [], "note": "Der Projektstart akzeptiert eine Beschreibung oder ein Referenzbild und übergibt den Auftrag direkt an den konfigurierten Agenten. Beide Varianten wurden mit echten Flutter-Projekten und einem simulierten Modellanbieter geprüft. Ohne Anbieter bleibt der Auftrag im Composer." },
         { "id": "P03", "criterion": "Aus einer Auswahl ausgearbeiteter App-Vorlagen starten", "status": "partial", "sources": ["quickstart"], "code": ["templates/catalog.json", "src/projects.rs"], "checks": [], "note": "Zwei Starter: Daymark und Blank. Keine vergleichbar breite Vorlagenauswahl belegt; Designqualität wird nicht als gleich bewertet." },
         { "id": "P04", "criterion": "Zwischen Vorschau, Code und Split sowie Arbeitsbereichen wechseln", "status": "implemented", "sources": ["workspace", "content"], "code": ["web/src/state.rs", "web/src/view.rs", "web/src/lib.rs"], "checks": [], "note": "Design-, Code-, Split- und Plan-Modus sowie Panel-Steuerung sind vorhanden." },
         { "id": "P05", "criterion": "Gespeicherte Projektänderungen gemeinsam rückgängig machen und wiederholen", "status": "implemented", "sources": ["workspace"], "code": ["src/edits.rs", "web/src/saved_edits.rs"], "checks": ["src/tests.rs::saved_multi_file_edits_replay_together_and_reject_external_changes_before_writing", "src/tests.rs::saved_visual_edits_undo_redo_exact_source_and_branch_after_a_new_edit"], "note": "Gruppierte Undo/Redo-Abläufe funktionieren. Laufendes Sitzungshistorium und dauerhafte Dateiversionen sind unterschiedliche Funktionen." },
@@ -184,7 +185,7 @@
         { "id": "G01", "criterion": "Repository verbinden, Änderungen und Diffs prüfen, stagen und committen", "status": "implemented", "sources": ["git"], "code": ["src/git.rs", "web/src/source_control.rs"], "checks": [], "note": "Integrierte Git-Aktionen und Oberfläche vorhanden; Authentifizierung verwendet die lokal konfigurierten Git-Zugangsdaten." },
         { "id": "G02", "criterion": "Branches erstellen/wechseln sowie Fetch, Pull und Push ausführen", "status": "implemented", "sources": ["git"], "code": ["src/git.rs", "web/src/source_control.rs"], "checks": [], "note": "Branch-/Tracking-/Sync-Aktionen sind im Code vorhanden; Anbieter-Tokenverwaltung erfolgt über das lokale Git-System." },
         { "id": "G03", "criterion": "Git-Konflikte vergleichen, eine Seite übernehmen oder manuell lösen", "status": "implemented", "sources": ["git"], "code": ["src/git.rs", "web/src/source_control.rs"], "checks": [], "note": "Konfliktansicht, lokale/eingehende Seite, Code-Bearbeitung, Stage/Mark resolved und Merge-Abbruch sind vorhanden." },
-        { "id": "G04", "criterion": "Eine Commit-Nachricht direkt in der Versionskontrolle mit KI vorschlagen lassen", "status": "implemented", "sources": ["git"], "code": ["src/git.rs", "web/src/source_control.rs"], "checks": [], "note": "Die KI entwirft einen Commit-Betreff aus dem vorgemerkten Diff. Abnahme im Browser mit echtem Git-Index und simuliertem Anbieter. Private und ungestagte Änderungen fehlten im Modellkontext. Index und HEAD blieben bis zum Commit unverändert." }
+        { "id": "G04", "criterion": "Eine Commit-Nachricht direkt in der Versionskontrolle mit KI vorschlagen lassen", "status": "implemented", "sources": ["git"], "code": ["src/git.rs", "web/src/source_control.rs"], "checks": [], "note": "Die KI entwirft einen Commit-Betreff aus dem vorgemerkten Diff. Abnahme im Browser mit echtem Git-Index und simuliertem Anbieter. Nur freigegebene, vorgemerkte Änderungen gingen in den Modellkontext ein. Der Vorschlag ließ Index und HEAD unverändert." }
       ]
     },
     {
