@@ -1,10 +1,10 @@
 # Freeflow ↔ Dreamflow: Vergleichsbasis 1.0
 
-**Stand: 2026-11-27 · Bewerteter Funktionsstand: [7e1d469](https://github.com/685/freeflow/commit/7e1d46959de65aa4de9717516486480a49f25291)**
+**Stand: 2026-11-28 · Bewerteter Funktionsstand: [32baad4](https://github.com/685/freeflow/commit/32baad412502f4dee7b64b384d6b1ca4740d7597)**
 
-**Arbeitsquote: 62 %** — 44 von 71 gleich gewichteten Punkten.
+**Arbeitsquote: 73 %** — 51,5 von 71 gleich gewichteten Punkten.
 
-36 erfüllt · 16 teilweise · 15 fehlend · 4 unverifiziert.
+43 erfüllt · 17 teilweise · 9 fehlend · 2 unverifiziert.
 
 Diese Zahl ist die nachvollziehbare Bewertung der folgenden öffentlichen Vergleichsliste. Sie ist keine Behauptung, dass exakt derselbe Anteil des gesamten Dreamflow-Produkts fertig ist. Eine vollständige Gegenprüfung in einer angemeldeten Dreamflow-Sitzung, identische Modellqualität, identisches Aussehen und verbleibender Zeitaufwand wurden nicht gemessen.
 
@@ -19,7 +19,7 @@ Die Basis umfasst Projektstart, Workspace, Agent, Planung, visuellen Editor, Vor
 | Fehlt | 0 | Für den beschriebenen integrierten Vorgang wurde im geprüften Quellcode keine Umsetzung gefunden. |
 | Unverifiziert | 0 | Code ist vorhanden, aber der entscheidende Geräte- oder Anbieterablauf ist nicht ausreichend belegt. Bis zur Abnahme gibt es keine Punkte. |
 
-Berechnung: `(36 × 1 + 16 × 0,5 + 15 × 0 + 4 × 0) / 71 × 100 = 61,97 %`, gerundet **62 %**.
+Berechnung: `(43 × 1 + 17 × 0,5 + 9 × 0 + 2 × 0) / 71 × 100 = 72,54 %`, gerundet **73 %**.
 
 „Erfüllt“ bezieht sich jeweils auf den beschriebenen Nutzervorgang. Bekannte Einschränkungen bleiben in der Zeile sichtbar. Eine Zeile mit Quellcodebeleg allein ist kein zusätzlicher erfolgreicher Browser-, Geräte- oder Anbieter-Test. Bei den unverifizierten Punkten zählt der vorhandene Code bis zur entscheidenden praktischen Abnahme mit null.
 
@@ -30,16 +30,16 @@ Alle Kriterien zählen gleich viel. Die Quote misst deshalb weder Aufwand noch w
 | Bereich | Erfüllt | Teilweise | Fehlt | Unverifiziert | Punkte | Quote |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
 | Projektstart und Workspace | 3 | 3 | 1 | 0 | 4,5 / 7 | 64,3 % |
-| Agent und Screen Planner | 3 | 3 | 4 | 0 | 4,5 / 10 | 45,0 % |
+| Agent und Screen Planner | 6 | 3 | 1 | 0 | 7,5 / 10 | 75,0 % |
 | Widget-Baum und Struktur | 6 | 2 | 0 | 0 | 7 / 8 | 87,5 % |
 | Eigenschaften und Modifiers | 4 | 3 | 0 | 0 | 5,5 / 7 | 78,6 % |
 | Assets und Theme | 6 | 0 | 1 | 0 | 6 / 7 | 85,7 % |
-| Code-Editor und Dart-Werkzeuge | 4 | 1 | 1 | 0 | 4,5 / 6 | 75,0 % |
-| Vorschau und Gerätetests | 5 | 1 | 0 | 1 | 5,5 / 7 | 78,6 % |
+| Code-Editor und Dart-Werkzeuge | 5 | 1 | 0 | 0 | 5,5 / 6 | 91,7 % |
+| Vorschau und Gerätetests | 5 | 2 | 0 | 0 | 6 / 7 | 85,7 % |
 | Firebase und Supabase | 0 | 2 | 6 | 0 | 1 / 8 | 12,5 % |
-| Git und Änderungen | 3 | 0 | 1 | 0 | 3 / 4 | 75,0 % |
-| Export und Veröffentlichung | 2 | 1 | 1 | 3 | 2,5 / 7 | 35,7 % |
-| **Gesamt** | **36** | **16** | **15** | **4** | **44 / 71** | **62 %** |
+| Git und Änderungen | 4 | 0 | 0 | 0 | 4 / 4 | 100,0 % |
+| Export und Veröffentlichung | 4 | 1 | 0 | 2 | 4,5 / 7 | 64,3 % |
+| **Gesamt** | **43** | **17** | **9** | **2** | **51,5 / 71** | **73 %** |
 
 ## Detailvergleich
 
@@ -63,13 +63,13 @@ Referenzlinks zeigen die am Stichtag gelesene öffentliche Dreamflow-Dokumentati
 | --- | --- | --- | --- | --- |
 | A01 | Mit einem Agenten streamend über Projektcode und ausgewählte Widgets arbeiten | **Erfüllt** | Ask/Edit, Dateitools, Auswahlkontext und Streaming sind vorhanden. Ergebnisqualität des gewählten Modells ist nicht mit Dreamflow gemessen. | [agent](https://docs.dreamflow.com/workspace/agent-panel/)<br>[src/agent.rs](../src/agent.rs), [src/agent/provider.rs](../src/agent/provider.rs), [web/src/agent_panel.rs](../web/src/agent_panel.rs)<br>Belegstufe: Quellcodeprüfung; siehe Prüfgrenzen. |
 | A02 | Bilder und automatisch aufgenommene App-/Widget-Screenshots als Agent-Kontext nutzen | **Teilweise** | Bildanhänge und technischer Auswahlkontext sind vorhanden; automatische Vorschau-/Widget-Aufnahme und Add-to-Agent mit Ausschnitt fehlen. | [agent](https://docs.dreamflow.com/workspace/agent-panel/)<br>[web/src/agent_panel.rs](../web/src/agent_panel.rs), [src/agent.rs](../src/agent.rs)<br>Belegstufe: Quellcodeprüfung; siehe Prüfgrenzen. |
-| A03 | Ein Widget direkt per Prompt Edit aus Baum oder Vorschau ändern | **Fehlt** | Allgemeiner Agent mit Widget-Auswahl ist vorhanden, aber kein entsprechender direkter Widget-Kontextdialog. | [agent](https://docs.dreamflow.com/workspace/agent-panel/), [tree](https://docs.dreamflow.com/workspace/widget-tree/)<br>[web/src/widget_clipboard.rs](../web/src/widget_clipboard.rs), [web/src/lib.rs](../web/src/lib.rs)<br>Belegstufe: Quellcodeprüfung; siehe Prüfgrenzen. |
+| A03 | Ein Widget direkt per Prompt Edit aus Baum oder Vorschau ändern | **Erfüllt** | Prompt Edit aus dem Widget-Baum und per Rechtsklick in der laufenden Flutter-Vorschau geprüft. Revision und Dart-Analyse sichern den Edit der ausgewählten Dart-Datei ab. Der Modellanbieter wurde für die Abnahme simuliert. | [agent](https://docs.dreamflow.com/workspace/agent-panel/), [tree](https://docs.dreamflow.com/workspace/widget-tree/)<br>[src/agent.rs](../src/agent.rs), [templates/preview.dart.in](../templates/preview.dart.in), [web/src/agent_panel.rs](../web/src/agent_panel.rs), [web/src/preview_inspector.rs](../web/src/preview_inspector.rs) |
 | A04 | Projektweite und unterordnerspezifische Agent-Regeln laden | **Erfüllt** | AGENTS.md und weitere Formate, Verzeichnisscope und Regeln bei Dateitools sind vorhanden; Konfliktprioritäten sind nicht identisch zur Referenz. | [agent](https://docs.dreamflow.com/workspace/agent-panel/)<br>[src/project_rules.rs](../src/project_rules.rs), [src/agent.rs](../src/agent.rs)<br>Tests: `src/tests.rs::project_rules_follow_file_scope_and_remain_visible_to_the_editor`; `src/tests.rs::project_rules_bound_unicode_excerpts_and_skip_non_text_files` |
 | A05 | Den Agenten App-, Build- und Fehlerlogs lesen lassen | **Erfüllt** | Projektbezogene Logs mit begrenzten Ausschnitten, Cursor und lesendem Ask-Zugriff sind vorhanden. | [agent](https://docs.dreamflow.com/workspace/agent-panel/)<br>[src/jobs.rs](../src/jobs.rs), [src/agent.rs](../src/agent.rs), [src/mcp.rs](../src/mcp.rs)<br>Tests: `src/jobs.rs::app_logs_are_project_scoped_and_ignore_stale_preview_batches` |
 | A06 | Das gesamte Projekt auf den Zustand vor einer früheren Agent-Anfrage zurücksetzen | **Teilweise** | Agent-Checkpoints stellen ihre betroffenen Dateien bei passenden Revisionen wieder her. Spätere manuelle Änderungen werden nicht wie beim dokumentierten projektweiten Zurückspulen überschrieben. | [agent](https://docs.dreamflow.com/workspace/agent-panel/)<br>[src/agent.rs](../src/agent.rs), [src/projects.rs](../src/projects.rs)<br>Tests: `src/tests.rs::project_batch_checks_all_revisions_before_applying_an_agent_edit` |
-| A07 | Mehrere Agent-Threads behalten und zwischen ihnen navigieren | **Fehlt** | Ein Chat pro Projekt; New leert die Nachrichten. Keine archivierte Thread-Auswahl oder Thread-Navigation wie im Checkpoint-Guide beschrieben. | [agent](https://docs.dreamflow.com/workspace/agent-panel/)<br>[src/agent.rs](../src/agent.rs), [web/src/agent_panel.rs](../web/src/agent_panel.rs)<br>Belegstufe: Quellcodeprüfung; siehe Prüfgrenzen. |
+| A07 | Mehrere Agent-Threads behalten und zwischen ihnen navigieren | **Erfüllt** | Unterhaltungen werden pro Projekt gespeichert und lassen sich wechseln. Bestehenden Verlauf, neue Unterhaltung und erneutes Öffnen nach Browser-Neuladen praktisch geprüft. | [agent](https://docs.dreamflow.com/workspace/agent-panel/)<br>[src/agent.rs](../src/agent.rs), [web/src/agent_panel.rs](../web/src/agent_panel.rs), [ui/index.html](../ui/index.html) |
 | A08 | Screens und Navigation vor der Generierung visuell planen und überarbeiten | **Teilweise** | Ziel, Screen-Karten, Beschreibungen, Verknüpfungen und Agent-Übergabe sind vorhanden; generierte visuelle Screen-Entwürfe und der Page Editor fehlen. | [planner](https://docs.dreamflow.com/workspace/screen-planner/)<br>[web/src/planner.rs](../web/src/planner.rs)<br>Belegstufe: Quellcodeprüfung; siehe Prüfgrenzen. |
-| A09 | Das globale Design mit Presets und Typografie im Screen Planner vorab festlegen | **Fehlt** | Theme-Werte können später im Projekt bearbeitet werden; kein integrierter Theme Editor für den Generierungsplan. | [planner](https://docs.dreamflow.com/workspace/screen-planner/)<br>[web/src/planner.rs](../web/src/planner.rs), [web/src/design_values.rs](../web/src/design_values.rs)<br>Belegstufe: Quellcodeprüfung; siehe Prüfgrenzen. |
+| A09 | Das globale Design mit Presets und Typografie im Screen Planner vorab festlegen | **Erfüllt** | Paletten-Presets, eigene Farben und Schriften für Überschriften und Text mit Vorschau. Speichern im Plan und Übergabe der Theme-Werte an die Generierung im Browser geprüft. | [planner](https://docs.dreamflow.com/workspace/screen-planner/)<br>[web/src/planner.rs](../web/src/planner.rs), [web/src/planner/theme.rs](../web/src/planner/theme.rs) |
 | A10 | KI-Funktionen der erzeugten App über einen verwalteten Entwicklungsproxy ausprobieren | **Fehlt** | Die eigene Provider-Konfiguration betrifft den Workbench-Agenten. Kein entsprechender verwalteter Proxy für OpenAI-Aufrufe aus der erzeugten App. | [agent](https://docs.dreamflow.com/workspace/agent-panel/)<br>[src/agent/provider.rs](../src/agent/provider.rs), [src/backends.rs](../src/backends.rs)<br>Belegstufe: Quellcodeprüfung; siehe Prüfgrenzen. |
 
 ### Widget-Baum und Struktur
@@ -118,7 +118,7 @@ Referenzlinks zeigen die am Stichtag gelesene öffentliche Dreamflow-Dokumentati
 | C03 | Fehler und Warnungen auch für ungespeicherten Dart-Code anzeigen | **Erfüllt** | Overlays und Problems-Anzeige sind vorhanden; Fehler werden vor dem Antwortlimit priorisiert. | [content](https://docs.dreamflow.com/workspace/content-panel/), [workspace](https://docs.dreamflow.com/workspace/)<br>[src/language.rs](../src/language.rs), [web/src/editor_assist.rs](../web/src/editor_assist.rs)<br>Tests: `src/language.rs::diagnostic_limits_cannot_hide_an_error_after_many_warnings` |
 | C04 | Beliebige Symbole per Typinfo, Definition und Referenzsuche navigieren | **Teilweise** | Typinfo und Projektdefinitionen sind vorhanden; Referenzoberfläche konzentriert sich auf Komponenten, Navigation außerhalb des Projekts ist begrenzt. | [content](https://docs.dreamflow.com/workspace/content-panel/)<br>[src/language.rs](../src/language.rs), [web/src/editor_assist.rs](../web/src/editor_assist.rs), [web/src/component_panel.rs](../web/src/component_panel.rs)<br>Belegstufe: Quellcodeprüfung; siehe Prüfgrenzen. |
 | C05 | Dart-Code im Editor formatieren | **Erfüllt** | Format-Aktion über das installierte Dart-Werkzeug ist vorhanden. | [content](https://docs.dreamflow.com/workspace/content-panel/)<br>[src/flutter.rs](../src/flutter.rs), [web/src/lib.rs](../web/src/lib.rs)<br>Belegstufe: Quellcodeprüfung; siehe Prüfgrenzen. |
-| C06 | Dart-Quick-Fixes und Code-Actions direkt auf Probleme anwenden | **Fehlt** | Kein textDocument/codeAction-Ablauf oder entsprechende Quick-Fix-Oberfläche. Allgemeine Agent-Bearbeitung ist ein anderer Vorgang. | [welcome](https://docs.dreamflow.com/)<br>[src/language.rs](../src/language.rs), [web/src/editor_assist.rs](../web/src/editor_assist.rs)<br>Belegstufe: Quellcodeprüfung; siehe Prüfgrenzen. |
+| C06 | Dart-Quick-Fixes und Code-Actions direkt auf Probleme anwenden | **Erfüllt** | Dart-Code-Actions und direkte Fix-Aktion in Problems für die aktive Datei. Einen unbenutzten Import mit dem echten Dart-Analyzer im ungespeicherten Entwurf entfernt und danach über den Editor gespeichert. | [welcome](https://docs.dreamflow.com/)<br>[src/language.rs](../src/language.rs), [web/src/editor_assist.rs](../web/src/editor_assist.rs), [web/src/editor_assist/actions.rs](../web/src/editor_assist/actions.rs)<br>Tests: `src/language.rs::code_actions_keep_only_text_edits_for_the_open_document` |
 
 ### Vorschau und Gerätetests
 
@@ -130,7 +130,7 @@ Referenzlinks zeigen die am Stichtag gelesene öffentliche Dreamflow-Dokumentati
 | R04 | Ein laufendes Widget im Canvas auswählen und seinem Quellcode zuordnen | **Erfüllt** | Inspect-Auswahl und Abgleich nach Reload sind in realer Flutter-Vorschau geprüft. | [content](https://docs.dreamflow.com/workspace/content-panel/)<br>[web/src/preview_inspector.rs](../web/src/preview_inspector.rs), [src/inspector.rs](../src/inspector.rs)<br>Tests: `src/tests.rs::live_inspector_prefers_the_matching_widget_column_and_project` |
 | R05 | Laufzeit-/Build-Logs, App-Status und Dependency-Refresh im Workspace nutzen | **Erfüllt** | print/debugPrint, Framework-Ausgaben, Jobstatus und Refresh Flutter dependencies sind vorhanden. | [content](https://docs.dreamflow.com/workspace/content-panel/), [workspace](https://docs.dreamflow.com/workspace/)<br>[src/jobs.rs](../src/jobs.rs), [web/src/preview_logs.rs](../web/src/preview_logs.rs), [web/src/view.rs](../web/src/view.rs)<br>Tests: `src/jobs.rs::app_log_excerpts_keep_the_latest_lines_and_bound_unicode_output` |
 | R06 | Eine beständige mobile Live-Vorschau per QR/Link einschließlich Home-Screen-Nutzung anbieten | **Teilweise** | Getesteter LAN-Link mit QR und Build-Refresh. Link gilt für die Freigabesitzung; kein gleichwertiger übergreifend beständiger Projektlink oder belegter PWA-Installationsablauf. | [mobile](https://docs.dreamflow.com/test/test-on-mobile-device/)<br>[src/phone_preview.rs](../src/phone_preview.rs), [web/src/phone_preview.rs](../web/src/phone_preview.rs)<br>Tests: `src/phone_preview.rs::phone_link_serves_versioned_web_builds_until_revoked` |
-| R07 | Auf echtem Android-/iOS-Gerät oder Simulator starten, neu laden und DevTools öffnen | **Unverifiziert** | Geräteerkennung, Run/Reload/Restart, Logs und DevTools-Link sind implementiert; durchgängiger Test auf realem Android und iOS fehlt als Nachweis. | [mobile](https://docs.dreamflow.com/test/test-on-mobile-device/)<br>[src/devices.rs](../src/devices.rs), [web/src/device_panel.rs](../web/src/device_panel.rs)<br>Tests: `src/devices.rs::flutter_device_ids_accept_adb_endpoints_and_reject_options` |
+| R07 | Auf echtem Android-/iOS-Gerät oder Simulator starten, neu laden und DevTools öffnen | **Teilweise** | Run, Hot reload, Hot restart und das Öffnen der DevTools im Android-Emulator geprüft. Durchgängige iOS-Abnahme steht aus. | [mobile](https://docs.dreamflow.com/test/test-on-mobile-device/)<br>[src/devices.rs](../src/devices.rs), [web/src/device_panel.rs](../web/src/device_panel.rs)<br>Tests: `src/devices.rs::flutter_device_ids_accept_adb_endpoints_and_reject_options` |
 
 ### Firebase und Supabase
 
@@ -152,7 +152,7 @@ Referenzlinks zeigen die am Stichtag gelesene öffentliche Dreamflow-Dokumentati
 | G01 | Repository verbinden, Änderungen und Diffs prüfen, stagen und committen | **Erfüllt** | Integrierte Git-Aktionen und Oberfläche vorhanden; Authentifizierung verwendet die lokal konfigurierten Git-Zugangsdaten. | [git](https://docs.dreamflow.com/integrations/git/)<br>[src/git.rs](../src/git.rs), [web/src/source_control.rs](../web/src/source_control.rs)<br>Belegstufe: Quellcodeprüfung; siehe Prüfgrenzen. |
 | G02 | Branches erstellen/wechseln sowie Fetch, Pull und Push ausführen | **Erfüllt** | Branch-/Tracking-/Sync-Aktionen sind im Code vorhanden; Anbieter-Tokenverwaltung erfolgt über das lokale Git-System. | [git](https://docs.dreamflow.com/integrations/git/)<br>[src/git.rs](../src/git.rs), [web/src/source_control.rs](../web/src/source_control.rs)<br>Belegstufe: Quellcodeprüfung; siehe Prüfgrenzen. |
 | G03 | Git-Konflikte vergleichen, eine Seite übernehmen oder manuell lösen | **Erfüllt** | Konfliktansicht, lokale/eingehende Seite, Code-Bearbeitung, Stage/Mark resolved und Merge-Abbruch sind vorhanden. | [git](https://docs.dreamflow.com/integrations/git/)<br>[src/git.rs](../src/git.rs), [web/src/source_control.rs](../web/src/source_control.rs)<br>Belegstufe: Quellcodeprüfung; siehe Prüfgrenzen. |
-| G04 | Eine Commit-Nachricht direkt in der Versionskontrolle mit KI vorschlagen lassen | **Fehlt** | Manuelles Nachrichtenfeld, kein entsprechender KI-Button oder angebundener Vorgang. | [git](https://docs.dreamflow.com/integrations/git/)<br>[web/src/source_control.rs](../web/src/source_control.rs)<br>Belegstufe: Quellcodeprüfung; siehe Prüfgrenzen. |
+| G04 | Eine Commit-Nachricht direkt in der Versionskontrolle mit KI vorschlagen lassen | **Erfüllt** | Die KI entwirft einen Commit-Betreff aus dem vorgemerkten Diff. Abnahme im Browser mit echtem Git-Index und simuliertem Anbieter. Private und ungestagte Änderungen fehlten im Modellkontext. Index und HEAD blieben bis zum Commit unverändert. | [git](https://docs.dreamflow.com/integrations/git/)<br>[src/git.rs](../src/git.rs), [web/src/source_control.rs](../web/src/source_control.rs) |
 
 ### Export und Veröffentlichung
 
@@ -160,16 +160,21 @@ Referenzlinks zeigen die am Stichtag gelesene öffentliche Dreamflow-Dokumentati
 | --- | --- | --- | --- | --- |
 | S01 | Das Flutter-Projekt als weiterbearbeitbaren Quellcode exportieren | **Erfüllt** | Quell-ZIP ist vorhanden; lokale private Konfiguration und Signierdaten bleiben ausgeschlossen. | [mobile](https://docs.dreamflow.com/test/test-on-mobile-device/)<br>[src/archive.rs](../src/archive.rs), [src/jobs.rs](../src/jobs.rs)<br>Tests: `src/tests.rs::project_revisions_history_and_source_archives` |
 | S02 | Die Web-App ohne separates Hosting-Setup veröffentlichen, aktualisieren und zurückziehen | **Teilweise** | Web-Export und Netlify-Deployment mit Update/Unpublish vorhanden. Eigenes Netlify-Konto/Token erforderlich; keine verwaltete Sofort-Hosting-Entsprechung, Anbieterprüfung mit simuliertem API-Server. | [web](https://docs.dreamflow.com/deployment/web-deployment/)<br>[src/deploy.rs](../src/deploy.rs), [web/src/web_publish.rs](../web/src/web_publish.rs), [src/jobs.rs](../src/jobs.rs)<br>Tests: `src/deploy.rs::builds_uploads_recovers_and_unpublishes_on_the_same_site` |
-| S03 | Installierbares Android-APK und signiertes AAB durchgängig bauen | **Unverifiziert** | Build- und Kotlin-Gradle-Signing-Abläufe vorhanden; kein ausreichender Nachweis eines real signierten, installierten Android-Exports in diesem Audit. | [play](https://docs.dreamflow.com/deployment/google-playstore-deployment/), [mobile](https://docs.dreamflow.com/test/test-on-mobile-device/)<br>[src/jobs.rs](../src/jobs.rs), [src/signing.rs](../src/signing.rs)<br>Tests: `src/jobs.rs::release_versions_override_flutter_defaults_for_the_selected_export` |
+| S03 | Installierbares Android-APK und signiertes AAB durchgängig bauen | **Erfüllt** | Mit Flutter und Gradle exportiertes APK im Android-Emulator installiert. Release-AAB über Freeflow mit Testschlüssel erstellt und seine Signatur gegen das Testzertifikat geprüft. | [play](https://docs.dreamflow.com/deployment/google-playstore-deployment/), [mobile](https://docs.dreamflow.com/test/test-on-mobile-device/)<br>[src/jobs.rs](../src/jobs.rs), [src/signing.rs](../src/signing.rs)<br>Tests: `src/jobs.rs::release_versions_override_flutter_defaults_for_the_selected_export` |
 | S04 | Einen neuen signierten Build erfolgreich in einen Google-Play-Track hochladen | **Unverifiziert** | Service-Account- und Release-Logik mit API-Simulation getestet; kein bestätigter echter Play-Upload. Ein Uploadfeld oder Mock-Erfolg gibt hierfür keinen vollen Punkt. | [play](https://docs.dreamflow.com/deployment/google-playstore-deployment/)<br>[src/stores.rs](../src/stores.rs), [web/src/store_upload.rs](../web/src/store_upload.rs)<br>Tests: `src/stores.rs::google_play_preserves_active_release_and_cleans_failed_edits` |
 | S05 | Auf macOS eine signierte IPA bauen und an App Store Connect übermitteln | **Unverifiziert** | IPA-Auswahl und Apple-Uploadpfad sind vorhanden; vollständiger Nachweis mit Xcode, Apple-Team und angenommenem Build fehlt. | [apple](https://docs.dreamflow.com/deployment/apple-app-store-deployment/)<br>[src/jobs.rs](../src/jobs.rs), [src/stores.rs](../src/stores.rs), [web/src/store_upload.rs](../web/src/store_upload.rs)<br>Tests: `src/jobs.rs::failed_ipa_export_cannot_reuse_an_older_ipa` |
 | S06 | App-Version, Buildnummer und Zielparameter pro Release festlegen | **Erfüllt** | Version/Buildnummer, Flavor/Dart-Defines und Store-Zielparameter sind vorhanden. Die echten Upload-Ergebnisse werden separat bewertet. | [play](https://docs.dreamflow.com/deployment/google-playstore-deployment/), [apple](https://docs.dreamflow.com/deployment/apple-app-store-deployment/)<br>[src/jobs.rs](../src/jobs.rs), [web/src/dialogs.rs](../web/src/dialogs.rs), [web/src/store_upload.rs](../web/src/store_upload.rs)<br>Tests: `src/jobs.rs::release_versions_override_flutter_defaults_for_the_selected_export` |
-| S07 | Hochgeladene App-Icons konfigurieren und beim nativen Build erzeugen | **Fehlt** | Bild-Upload ist vorhanden; kein integrierter flutter_launcher_icons-Vorlauf oder entsprechend geführter Icon-Build. Manuelle Einrichtung außerhalb des Workspaces bleibt möglich. | [prepublish](https://docs.dreamflow.com/publish/pre-checks-before-publishing/)<br>[src/jobs.rs](../src/jobs.rs), [src/projects.rs](../src/projects.rs), [web/src/asset_panel.rs](../web/src/asset_panel.rs)<br>Belegstufe: Quellcodeprüfung; siehe Prüfgrenzen. |
+| S07 | Hochgeladene App-Icons konfigurieren und beim nativen Build erzeugen | **Erfüllt** | Hochgeladene Android- und iOS-PNGs im Browser konfiguriert. Nativer Build erzeugte Android-Launcher- und Adaptive-Icons sowie das iOS-AppIcon-Set. Gruppiertes Undo und Redo geprüft. | [prepublish](https://docs.dreamflow.com/publish/pre-checks-before-publishing/)<br>[src/launcher_icons.rs](../src/launcher_icons.rs), [src/jobs.rs](../src/jobs.rs), [src/devices.rs](../src/devices.rs), [web/src/asset_panel.rs](../web/src/asset_panel.rs) |
 
 ## Was bereits geprüft wurde — und was nicht
 
-- Quellcodeprüfung am 2026-11-27. Typgestützte Eigenschaftseditoren und verschachtelte Wertbearbeitung in der Vergleichsliste aktualisiert.
-- Der Workflow prüft Rust und den Rust-WASM-Build unter Windows, Linux und macOS. Der lokale Lauf für den bewerteten Code umfasst 68 erfolgreiche Rust-Tests und den WASM-Build. [GitHub-Prüfungen](https://github.com/685/freeflow/actions/workflows/check.yml)
+- Quellcodeprüfung am 2026-11-28. Agent, Screen Planner, Git und native Android-Exporte in der Vergleichsliste aktualisiert.
+- Der Workflow prüft Rust und den Rust-WASM-Build unter Windows, Linux und macOS. Der lokale Lauf für den bewerteten Code umfasst 69 erfolgreiche Rust-Tests und den WASM-Build. [GitHub-Prüfungen](https://github.com/685/freeflow/actions/workflows/check.yml)
+- Prompt Edit in Quellbaum und laufender Flutter-Web-Vorschau, gespeicherte Agent-Unterhaltungen und KI-Commit-Vorschläge im Browser geprüft. Ein lokaler OpenAI-kompatibler Testanbieter lieferte kontrollierte Antworten.
+- Theme-Presets, eigene Farben und Typografie im Screen Planner gespeichert und an die Generierung übergeben.
+- Flutter 3.38.10 und Gradle erzeugten im gleichen Testlauf adaptive Android-Icons und das iOS-AppIcon-Set. Separat wurden das exportierte APK im Emulator installiert und die Signatur des exportierten AAB mit dem Testzertifikat geprüft.
+- Ein echter Dart-Quick-Fix entfernte einen unbenutzten Import im offenen Editorentwurf und speicherte über den normalen Workflow. Eine benachbarte Zeile mit Emoji blieb erhalten.
+- Die laufende Android-Test-App zeigte die gespeicherte Textänderung nach Hot reload. Hot restart, der lokale DevTools-Endpunkt und das Beenden der Sitzung wurden ebenfalls geprüft.
 - Eigenschaftseditoren: Text, Zahlen, Boolesche Werte, ARGB, Projekt- und Flutter-Enums sowie per SDK gesuchte Icons im Browser gespeichert. Verschachtelte Map- und Listenwerte, Sets und Konstruktorargumente bearbeitet. Typfehler, veraltete Revisionen und bytegenaues Undo/Redo geprüft. Eine laufende Flutter-Web-App zeigte die gespeicherten Werte.
 - Konstruktorwechsel: Flutter- und generische Projekt-Widgets im Browser gewechselt, Kindargumente übernommen oder neu zugeordnet, Typfehler und veraltete Revisionen abgewiesen sowie exakt rückgängig gemacht und wiederholt. Gleichnamiges Paket-Widget über MCP gewechselt. Die laufende Flutter-Web-App zeigte die übernommenen Kinder und die Paketvariante.
 - Wrap und Modifiers: Im Browser Flutter-, Projekt- und Paket-Wrapper konfiguriert, bestehende Widget-Kommentare erhalten und Fehler vor dem Speichern abgewiesen. Typisierter appBar-Platz, alternative und positionale Kindparameter, Imports, MCP und exaktes Undo/Redo geprüft.
@@ -177,9 +182,9 @@ Referenzlinks zeigen die am Stichtag gelesene öffentliche Dreamflow-Dokumentati
 - Widget-Bibliothek: 674 Framework-Konstruktoren, Projekt- und Paket-Widgets, benannte Konstruktoren, Dart-Prüfung, Imports, genaue Undo/Redo-Wiederherstellung, veraltete Revisionen, MCP-Einfügen und lesender Agent-Zugriff geprüft.
 - Hot reload: laufende Route, Zähler und Texteingabe bleiben erhalten; Hot restart setzt Zustand zurück; Fehler und Wiederherstellung wurden in einer realen Flutter-Web-App geprüft.
 - Vorhandene Assets-, Theme-, Clipboard-, Komponenten-, Telefonvorschau- und Agent-Kontext-Prüfungen ergänzen die Quellcode- und Rust-Testbelege.
-- REA wurde unter Ubuntu/WSL auf gerenderten öffentlichen Seiten eingesetzt. Gesehen wurden unter anderem Konstruktorwechsel und Modifiers, Screenshot Mode/Prompt Edit, Screen-Planner-Theme sowie Supabase-Schema- und Edge-Function-Bereiche. Es wurden keine Kontoaktionen durchgeführt.
-- Nicht belegt sind insbesondere reale Android-/iOS-Geräteabnahmen und angenommene Play-/App-Store-Builds. CI auf macOS prüft den Rust-Code und den WASM-Build; sie ersetzt keinen signierten iOS-Export.
-- Die bestehende Drittanbieter-API-Simulation in Hosting-/Store-Tests bleibt als solche gekennzeichnet. Es wurden für diesen Vergleich keine kostenpflichtigen Veröffentlichungen oder Cloud-Projekte erstellt.
+- REA lief unter Ubuntu/WSL auf gerenderten öffentlichen Seiten. Öffentlich sichtbare Abschnitte bestätigen Prompt Edit, Restore Checkpoint, Theme Editor, Commit Message sowie Launcher Icon und Adaptive Icons. Frühere Abgleiche erfassen unter anderem Modifiers und Supabase-Schema- und Edge-Function-Abläufe.
+- Offen sind die iOS-Geräteabnahme, der signierte iOS-Export und die Annahme von Play- und App-Store-Builds. Die macOS-Prüfung auf GitHub deckt den Rust- und WASM-Build ab.
+- Die bestehenden Hosting- und Store-Tests verwenden simulierte Anbieter. Für diese Abnahme wurden keine Veröffentlichungen oder Cloud-Projekte erstellt.
 
 ## Nicht verrechnete Unterschiede
 
@@ -190,10 +195,10 @@ Referenzlinks zeigen die am Stichtag gelesene öffentliche Dreamflow-Dokumentati
 
 ## Nächste Abnahmeschritte
 
-- **V02, V05:** Visuelle Editoren für weitere Dart-Typen, Positionsparameter und frei definierte Objektschemata ausbauen. Berechnete und verschachtelte Werte in realen Flutter-Dateien abnehmen.
-- **A02, A03, A08, A09:** Echten Widget-/Vorschau-Bildkontext, direkten Prompt Edit und visuelle Screen-/Theme-Planung ergänzen.
-- **B02, B03, B05, B06, B08:** Geführte Backend-Verwaltung und Deployment mit passenden Testprojekten aufbauen; reine Client-Initialisierung nicht als Gesamtintegration werten.
-- **R07, S03, S04, S05:** Offene Geräte- und Anbieterabnahmen auf echter Hardware beziehungsweise Testkonten durchführen, sobald die benötigte Umgebung vorhanden ist.
+- **V02, V05** — Visuelle Editoren für weitere Dart-Typen, Positionsparameter und frei definierte Objektschemata ausbauen. Berechnete und verschachtelte Werte in realen Flutter-Dateien abnehmen.
+- **A02, A08** — Vorschau- und Widget-Aufnahmen als Agent-Kontext sowie bearbeitbare Screen-Entwürfe im Planner umsetzen.
+- **B02, B03, B05, B06, B08** — Geführte Backend-Verwaltung und Deployment mit passenden Testprojekten aufbauen; reine Client-Initialisierung nicht als Gesamtintegration werten.
+- **R07, S04, S05** — iOS-Gerätelauf, signierte IPA und echte Store-Annahmen mit Xcode und autorisierten Testprojekten prüfen.
 
 ## Fortschritt ohne wechselnden Maßstab
 
