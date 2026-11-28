@@ -111,6 +111,9 @@ pub(crate) enum View {
     WidgetProperty {
         context: crate::property_panel::Context,
     },
+    WidgetPromptEdit {
+        context: crate::property_panel::Context,
+    },
     PropertyValue {
         context: crate::property_panel::Context,
     },
@@ -140,6 +143,14 @@ pub(crate) enum View {
         name: String,
         entries: Vec<Value>,
     },
+    AppIcons {
+        project: String,
+        config: Value,
+    },
+    PlanTheme {
+        project: String,
+        generation: u64,
+    },
     ComponentReferences {
         project: String,
         generation: u64,
@@ -149,6 +160,9 @@ pub(crate) enum View {
         project: String,
     },
     Quick,
+    DartActions {
+        actions: std::rc::Rc<crate::editor_assist::actions::Menu>,
+    },
 }
 
 thread_local! { static MODAL: RefCell<(u64, View)> = const { RefCell::new((0, View::Closed)) }; }
@@ -1111,6 +1125,13 @@ pub(crate) fn form_data(form: &Element) -> Value {
 
 async fn submit_view(view: View, version: u64, mut input: Value) -> Result {
     match view {
+        View::PlanTheme {
+            project,
+            generation,
+        } => crate::planner::theme::apply(&project, generation, version, &input)?,
+        View::AppIcons { project, config } => {
+            crate::asset_panel::save_app_icons(&project, version, &config, input).await?
+        }
         View::PropertyValue { context } => {
             crate::property_panel::values::submit(&context, version).await?
         }
@@ -1131,6 +1152,9 @@ async fn submit_view(view: View, version: u64, mut input: Value) -> Result {
         } => crate::design_values::save(&project, generation, &entry, version, input).await?,
         View::WidgetProperty { context } => {
             crate::property_panel::submit(&context, version, input).await?
+        }
+        View::WidgetPromptEdit { context } => {
+            crate::agent_panel::submit_prompt_edit(&context, version, input).await?
         }
         View::PhonePreview { project } if current(&project) => {
             crate::phone_preview::submit(&project, input).await?;
@@ -1224,6 +1248,9 @@ async fn submit_view(view: View, version: u64, mut input: Value) -> Result {
 
 async fn act(view: View, version: u64, action: &str, element: &Element) -> Result {
     match view {
+        View::DartActions { actions } => {
+            crate::editor_assist::actions::apply(&actions, version, action)?
+        }
         View::PropertyValue { context } => {
             crate::property_panel::values::act(&context, version, action).await?
         }
@@ -1292,6 +1319,14 @@ async fn act(view: View, version: u64, action: &str, element: &Element) -> Resul
         } => crate::component_panel::act(&project, generation, &result, version, action).await?,
         View::WidgetProperty { context } => {
             crate::property_panel::act(&context, version, action).await?
+        }
+        View::WidgetPromptEdit { .. } if action == "stop-widget-edit" => {
+            if let Some(job) = element
+                .get_attribute("data-job")
+                .filter(|job| !job.is_empty())
+            {
+                post(&format!("/jobs/{job}/stop"), json!({})).await?;
+            }
         }
         View::PhonePreview { project } if current(&project) => {
             crate::phone_preview::act(&project, version, action).await?;

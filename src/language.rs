@@ -111,6 +111,7 @@ impl Analyzers {
                 | "definition"
                 | "references"
                 | "hover"
+                | "code-actions"
         ) || saved && matches!(action, "definition-paths" | "enum-values" | "icon-values"))
         {
             return Err(Problem::new(400, "Choose a Dart editor action."));
@@ -135,6 +136,17 @@ impl Analyzers {
         }
         let cursor = input["offset"].as_u64().unwrap_or(0);
         let position = position(text, cursor)?;
+        let selection = Range {
+            start: position,
+            end: if action == "code-actions" {
+                self::position(
+                    text,
+                    input["endOffset"].as_u64().unwrap_or(cursor).max(cursor),
+                )?
+            } else {
+                position
+            },
+        };
         let uri = file_uri(&target)?;
         let command = jobs.flutter.dart_analyzer()?;
         let session = self.session(&project.id);
@@ -172,7 +184,7 @@ impl Analyzers {
                     action,
                     uri.as_str(),
                     text,
-                    position,
+                    selection,
                     &jobs.projects,
                     project,
                 )
@@ -205,7 +217,7 @@ fn file_uri(path: &Path) -> Result<Url> {
         .map_err(|_| Problem::new(422, "Dart could not open this project path."))
 }
 
-#[derive(Clone, Copy, Deserialize, Serialize)]
+#[derive(Clone, Copy, Deserialize, Serialize, Eq, Ord, PartialEq, PartialOrd)]
 struct Position {
     line: u32,
     character: u32,
@@ -308,7 +320,8 @@ impl Analyzer {
                                 "completionItemKind":{"valueSet":(1..=25).collect::<Vec<_>>()}
                             },
                             "hover":{"contentFormat":["plaintext"]},
-                            "definition":{"linkSupport":true}
+                            "definition":{"linkSupport":true},
+                            "codeAction":{"codeActionLiteralSupport":{"codeActionKind":{"valueSet":["quickfix","refactor","source"]}}}
                         }
                     }
                 }),
@@ -475,13 +488,36 @@ impl Analyzer {
         action: &str,
         uri: &str,
         text: &str,
-        position: Position,
+        selection: Range,
         projects: &Projects,
         project: &Project,
     ) -> Result<Value> {
         self.sync(uri, text).await?;
+        let position = selection.start;
         let params = json!({"textDocument":{"uri":uri},"position":position});
         match action {
+            "code-actions" => {
+                self.wait_for_diagnostics(uri).await?;
+                let document = &self.documents[uri];
+                let version = document.version;
+                let selected: Vec<_> = document
+                    .diagnostics
+                    .as_ref()
+                    .and_then(Value::as_array)
+                    .into_iter()
+                    .flatten()
+                    .filter(|item| {
+                        serde_json::from_value::<Range>(item["range"].clone()).is_ok_and(|range| {
+                            selection.start <= range.end && range.start <= selection.end
+                        })
+                    })
+                    .take(50)
+                    .collect();
+                let params = json!({"textDocument":{"uri":uri},"range":selection,
+                    "context":{"diagnostics":selected,"triggerKind":1}});
+                let result = self.request("textDocument/codeAction", params).await?;
+                Ok(json!({"actions":local_actions(&result,uri,version)}))
+            }
             "diagnose" => {
                 self.wait_for_diagnostics(uri).await?;
                 let values = self.documents[uri].diagnostics.as_ref().unwrap();
@@ -701,6 +737,64 @@ fn diagnostics(values: &Value) -> Vec<Value> {
         .collect()
 }
 
+fn local_actions(result: &Value, uri: &str, version: u64) -> Vec<Value> {
+    let mut bytes = 0;
+    result
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|item| {
+            // Dart attaches a logAction notification to otherwise standalone edits.
+            if !item["disabled"].is_null()
+                || (!item["command"].is_null() && item["command"]["command"] != "dart.logAction")
+            {
+                return None;
+            }
+            let title = clip(&item["title"], 240)?;
+            let edit = &item["edit"];
+            let edits = if let Some(documents) = edit["documentChanges"].as_array() {
+                if documents.len() != 1
+                    || documents[0]["textDocument"]["uri"] != uri
+                    || documents[0]["textDocument"]["version"]
+                        .as_u64()
+                        .is_some_and(|n| n != version)
+                {
+                    return None;
+                }
+                documents[0]["edits"].as_array()?
+            } else {
+                let changes = edit["changes"].as_object()?;
+                if changes.len() != 1 {
+                    return None;
+                }
+                changes.get(uri)?.as_array()?
+            };
+            if edits.is_empty() || edits.len() > 160 {
+                return None;
+            }
+            let mut size = 0;
+            let edits = edits
+                .iter()
+                .map(|edit| {
+                    let range = serde_json::from_value::<Range>(edit["range"].clone()).ok()?;
+                    let text = edit["newText"].as_str()?;
+                    if range.start > range.end
+                        || text.len() > files::MAX_TEXT
+                        || text.contains('\0')
+                    {
+                        return None;
+                    }
+                    size += text.len();
+                    (bytes + size <= 512 * 1024).then(|| json!({"range":range,"text":text}))
+                })
+                .collect::<Option<Vec<_>>>()?;
+            bytes += size;
+            Some(json!({"title":title,"kind":item["kind"],"edits":edits}))
+        })
+        .take(40)
+        .collect()
+}
+
 fn definition_entries(result: &Value) -> &[Value] {
     result
         .as_array()
@@ -767,6 +861,22 @@ fn hover(contents: &Value) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn code_actions_keep_only_text_edits_for_the_open_document() {
+        let uri = "file:///workbench/lib/main.dart";
+        let edit = json!({"range":{"start":{"line":0,"character":2},"end":{"line":0,"character":4}},"newText":"value"});
+        let result = json!([
+            {"title":"Fix local value","command":{"command":"dart.logAction"},"edit":{"changes":{(uri):[edit]}}},
+            {"title":"Edit project files","edit":{"changes":{(uri):[edit],"file:///elsewhere.dart":[edit]}}},
+            {"title":"Create a file","edit":{"documentChanges":[{"kind":"create","uri":"file:///elsewhere.dart"}]}},
+            {"title":"Resolve stale version","edit":{"documentChanges":[{"textDocument":{"uri":uri,"version":3},"edits":[edit]}]}},
+            {"title":"Run command","command":{"command":"dart.run"}},
+        ]);
+        let actions = local_actions(&result, uri, 4);
+        assert_eq!(actions.len(), 1);
+        assert_eq!(actions[0]["edits"][0]["text"], "value");
+    }
 
     #[test]
     fn diagnostic_limits_cannot_hide_an_error_after_many_warnings() {

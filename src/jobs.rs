@@ -1034,6 +1034,14 @@ impl Jobs {
         self.pub_command(job, project, &sdk, &["pub", "get"])
             .await?;
         let _build = self.flutter_build_slot(job, project).await?;
+        let platform = match flags.first().map(String::as_str) {
+            Some("apk" | "appbundle") => Some("android"),
+            Some("ipa") => Some("ios"),
+            _ => None,
+        };
+        if let Some(platform) = platform {
+            crate::launcher_icons::generate(&self.projects, project, job, &sdk, platform).await?;
+        }
         let mut args = vec![OsString::from("build")];
         args.extend(flags.into_iter().map(OsString::from));
         args.push("--no-pub".into());

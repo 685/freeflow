@@ -12,6 +12,7 @@ mod git;
 mod inspector;
 mod jobs;
 mod language;
+mod launcher_icons;
 mod mcp;
 mod modifier_kind;
 mod phone_preview;

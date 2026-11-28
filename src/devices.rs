@@ -177,8 +177,13 @@ impl Session {
                     job.log(format!("Flutter is running on {}.", self.device));
                 }
             }
-            Some("app.debugPort") => {
-                if let Some(url) = debug_url(&params["devToolsUri"]) {
+            Some(event @ ("app.devTools" | "app.debugPort")) => {
+                let field = if event == "app.devTools" {
+                    "uri"
+                } else {
+                    "devToolsUri"
+                };
+                if let Some(url) = debug_url(&params[field]) {
                     job.device_debug_url(url);
                 }
             }
@@ -207,7 +212,7 @@ impl Session {
                     .unwrap_or("Flutter could not apply this change.");
                 job.compile_error(detail.to_owned());
             } else {
-                job.device_ready(&self.device);
+                job.hot_reloaded();
                 job.log(if restart {
                     "Hot restart complete."
                 } else {
@@ -239,6 +244,12 @@ async fn run(
     let sdk = jobs.flutter.require()?;
     jobs.pub_command(job, project, &sdk, &["pub", "get"])
         .await?;
+    let platform = info["platform"].as_str().unwrap_or_default();
+    if platform.starts_with("android") || platform == "ios" {
+        let _slot = jobs.flutter_build_slot(job, project).await?;
+        let platform = if platform == "ios" { "ios" } else { "android" };
+        crate::launcher_icons::generate(&jobs.projects, project, job, &sdk, platform).await?;
+    }
     let name = info["name"].as_str().unwrap_or(device).to_owned();
     let capabilities = &info["capabilities"];
     let mut args = vec!["run", "--machine", "--no-pub", "-d", device]

@@ -57,6 +57,7 @@ pub fn writing(route: &str, method: &str) -> Option<(String, u64)> {
                     | "widget-library-wrap"
                     | "widget-constructor-switch"
                     | "widget-property-save"
+                    | "launcher-icons"
             )
     ) {
         return None;

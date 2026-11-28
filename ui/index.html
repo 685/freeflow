@@ -69,7 +69,7 @@
         </div>
         <input id="asset-input" type="file" accept=".png,.jpg,.jpeg,.gif,.webp,.avif,.ico,.bmp,.wbmp,.svg,.mp3,.wav,.ogg,.flac,.aac,.m4a,.opus,.mp4,.m4v,.webm,.mov,.ogv,.ttf,.otf,.pdf,.txt,.json,.csv,.xml,.md,.arb,.zip" multiple hidden>
         <div id="asset-tools" class="asset-tools" hidden>
-          <div class="file-actions"><button id="upload-assets" class="button soft small" type="button"><span data-icon="plus"></span>Upload assets</button><button id="refresh-assets" class="icon-button" type="button" aria-label="Refresh assets"><span data-icon="reload"></span></button></div>
+          <div class="file-actions"><button id="upload-assets" class="button soft small" type="button"><span data-icon="plus"></span>Upload assets</button><button id="app-icons" class="button soft small" type="button">App icons</button><button id="refresh-assets" class="icon-button" type="button" aria-label="Refresh assets"><span data-icon="reload"></span></button></div>
           <input id="asset-search" type="search" placeholder="Search assets…" aria-label="Search assets">
           <div id="asset-drop" class="asset-drop" role="group" aria-label="Asset upload area">Drop files here · up to 10 MiB each</div>
         </div>
@@ -153,6 +153,7 @@
           <button type="button" id="dart-definition" class="button plain small" title="Go to definition (F12)">Definition</button>
           <button type="button" id="dart-type" class="button plain small" title="Show type and documentation">Type</button>
           <button type="button" id="dart-problems" class="button plain small" aria-expanded="false">Problems</button>
+          <button type="button" id="dart-actions" class="button plain small" title="Dart code actions (Ctrl/Cmd+.)">Code actions</button>
         </div>
         <div class="dart-popup" id="dart-popup" hidden></div>
         <div class="dart-problems" id="dart-problem-list" hidden></div>
@@ -160,6 +161,7 @@
           <div class="plan-screens" id="plan-screens"></div>
           <div class="plan-actions">
             <button type="button" class="button soft small" id="plan-add"><span data-icon="plus"></span>Add screen</button>
+            <button type="button" class="button outline small" id="plan-theme"><span data-icon="palette"></span>Theme</button>
             <button type="button" class="button outline small" id="plan-draft"><span data-icon="spark"></span>Plan with Agent</button>
             <button type="button" class="button primary small" id="plan-generate"><span data-icon="play"></span>Build from plan</button>
           </div>
@@ -202,6 +204,7 @@
             <button id="agent-close" type="button" class="icon-button" title="Close Agent" aria-label="Close Agent"><span data-icon="x"></span></button>
           </div>
         </div>
+        <select id="agent-thread" class="agent-thread" aria-label="Agent conversation"></select>
         <div id="agent-messages" class="agent-messages" role="log" aria-label="Conversation"></div>
         <form id="agent-form" class="agent-form">
           <div id="agent-context" class="agent-context ellipsis"></div>

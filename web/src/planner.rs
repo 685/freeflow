@@ -10,6 +10,8 @@ use serde_json::json;
 use wasm_bindgen::JsCast;
 use web_sys::HtmlInputElement;
 
+pub(crate) mod theme;
+
 const GOAL: &str = "## Goal";
 const SCREENS: &str = "## Screens";
 const SUMMARY: &str = "  - Summary: ";
@@ -202,7 +204,7 @@ pub fn render(state: &State) {
             "Markdown"
         },
     );
-    for name in ["plan-add", "plan-draft", "plan-generate"] {
+    for name in ["plan-add", "plan-theme", "plan-draft", "plan-generate"] {
         disabled(name, !loaded);
     }
     if !loaded {
@@ -279,13 +281,14 @@ async fn prepare(build: bool) -> Result {
         if !crate::current(&project) {
             return Err(Error::new("Open the project with the app plan."));
         }
-        crate::agent_panel::prepare("Read FREEFLOW_PLAN.md and build the Flutter app from the planned screens, user flows and goal. Inspect existing code first and preserve app behavior that the plan keeps.").await
+        crate::agent_panel::prepare("Read FREEFLOW_PLAN.md and build the Flutter app from the planned screens, user flows and goal. Apply the palette and typography from the Theme section to the global Flutter theme. Inspect existing code first and preserve app behavior that the plan keeps.").await
     } else {
         crate::agent_panel::prepare("Draft or refine FREEFLOW_PLAN.md for this Flutter app. Update only that plan. Use ## Goal and ## Screens with one checklist item per screen, followed by indented Summary and Opens bullets. My app idea is: ").await
     }
 }
 
 pub fn initialize() {
+    theme::initialize();
     dom::click("plan-layout", || {
         state::change(|state| {
             state.plan_markdown = !state.plan_markdown;

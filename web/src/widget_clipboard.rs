@@ -26,6 +26,7 @@ pub fn controls(node: &Value, menu: bool) -> String {
             if menu { format!("<span>Ctrl/⌘+{shortcut}</span>") } else { String::new() }));
     }
     if menu {
+        output.push_str(r#"<button type="button" class="button soft small" role="menuitem" data-widget-prompt-edit>Prompt Edit</button>"#);
         output.push_str(&crate::component_panel::controls(node, true));
         if node["libraryChildren"] == true {
             output.push_str(r#"<button type="button" class="button soft small" role="menuitem" data-widget-library="insert">Add widget</button>"#);
@@ -112,7 +113,7 @@ fn close() {
     id("widget-menu").set_hidden(true);
 }
 
-fn show(x: i32, y: i32) {
+pub(crate) fn show(x: i32, y: i32) {
     let Some(node) = state::read(|state| state.widget().cloned()) else {
         return;
     };
@@ -158,6 +159,7 @@ pub fn initialize() {
             .and_then(|button| button.get_attribute("data-widget-clipboard"));
         let library = closest(&event, "#widget-menu [data-widget-library]")
             .and_then(|button| button.get_attribute("data-widget-library"));
+        let prompt = closest(&event, "#widget-menu [data-widget-prompt-edit]").is_some();
         close();
         if let Some(action) = action {
             dom::spawn(perform(action));
@@ -169,6 +171,8 @@ pub fn initialize() {
                 Operation::Insert
             };
             dom::spawn(open(operation));
+        } else if prompt {
+            dom::spawn(crate::agent_panel::prompt_edit());
         }
     });
     dom::listen(&id("explorer-tree"), "contextmenu", |event| {

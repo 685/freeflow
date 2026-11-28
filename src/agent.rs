@@ -1,4 +1,4 @@
-mod provider;
+pub(crate) mod provider;
 
 use crate::{
     files::{self, Problem, Result, Source},
@@ -29,6 +29,73 @@ struct Chat {
     rules: String,
     messages: Vec<Message>,
     checkpoints: Vec<Checkpoint>,
+    thread: String,
+    archived: Vec<Conversation>,
+}
+
+#[derive(Deserialize, Serialize)]
+struct Conversation {
+    id: String,
+    messages: Vec<Message>,
+}
+
+fn title(messages: &[Message]) -> String {
+    messages
+        .iter()
+        .find(|message| message.role == "user")
+        .and_then(|message| message.text.lines().find(|line| !line.trim().is_empty()))
+        .map_or_else(
+            || "New conversation".into(),
+            |line| {
+                let title: String = line.trim().chars().take(60).collect();
+                if title.len() < line.trim().len() {
+                    format!("{title}…")
+                } else {
+                    title
+                }
+            },
+        )
+}
+
+impl Chat {
+    fn active_thread(&self) -> &str {
+        if self.thread.is_empty() {
+            "initial"
+        } else {
+            &self.thread
+        }
+    }
+
+    fn archive_active(&mut self) {
+        if !self.messages.is_empty() {
+            let id = self.active_thread().to_owned();
+            self.archived.push(Conversation {
+                id,
+                messages: std::mem::take(&mut self.messages),
+            });
+        }
+    }
+
+    fn start_thread(&mut self) {
+        self.archive_active();
+        self.thread = files::short_id(16);
+    }
+
+    fn select_thread(&mut self, id: &str) -> Result<()> {
+        if id == self.active_thread() {
+            return Ok(());
+        }
+        let index = self
+            .archived
+            .iter()
+            .position(|thread| thread.id == id)
+            .ok_or_else(|| Problem::new(404, "Agent conversation not found."))?;
+        let thread = self.archived.remove(index);
+        self.archive_active();
+        self.thread = thread.id;
+        self.messages = thread.messages;
+        Ok(())
+    }
 }
 
 #[derive(Deserialize, Serialize)]
@@ -100,10 +167,18 @@ pub fn save_provider(home: &Path, input: &Value) -> Result<Value> {
 pub fn state(jobs: &Jobs, project: &Project) -> Result<Value> {
     let projects = &jobs.projects;
     let chat: Chat = files::read_json(&chat_path(projects, project))?.unwrap_or_default();
+    let mut threads = vec![json!({"id":chat.active_thread(),"title":title(&chat.messages)})];
+    threads.extend(
+        chat.archived
+            .iter()
+            .rev()
+            .map(|thread| json!({"id":thread.id,"title":title(&thread.messages)})),
+    );
     Ok(json!({
         "provider":Provider::load(&projects.home)?.public(), "rules":chat.rules, "messages":chat.messages,
         "checkpoints":chat.checkpoints.iter().map(Checkpoint::summary).collect::<Vec<_>>(),
         "job":jobs.active_command(&project.id, "agent-send"),
+        "thread":chat.active_thread(),"threads":threads,
     }))
 }
 
@@ -115,8 +190,12 @@ pub fn operation(jobs: &Arc<Jobs>, project: Project, input: &Value) -> Result<Va
             let provider = Provider::load(&jobs.projects.home)?;
             provider.ready()?;
             let prompt = Prompt::parse(input)?;
+            let thread = input["thread"].as_str().map(str::to_owned);
             jobs.enqueue("agent-send", Some(project), Mode::Exclusive, move |jobs, job| async move {
-                let mut chat = files::read_json(&chat_path(&jobs.projects, &target))?.unwrap_or_default();
+                let mut chat: Chat = files::read_json(&chat_path(&jobs.projects, &target))?.unwrap_or_default();
+                if thread.as_deref().is_some_and(|thread|thread != chat.active_thread()) {
+                    return Err(Problem::new(409, "The active Agent conversation changed. Open it again before sending."));
+                }
                 let cancellation = job.cancel.clone();
                 tokio::select! {
                     _ = cancellation.cancelled() => Err(Problem::new(409, "Agent reply canceled.")),
@@ -124,7 +203,7 @@ pub fn operation(jobs: &Arc<Jobs>, project: Project, input: &Value) -> Result<Va
                 }
             })
         }
-        "rules" | "new" | "undo" => {
+        "rules" | "new" | "select-thread" | "undo" => {
             let input = input.clone();
             jobs.enqueue(
                 format!("agent-{action}"),
@@ -148,7 +227,12 @@ pub fn operation(jobs: &Arc<Jobs>, project: Project, input: &Value) -> Result<Va
                             Ok(json!({}))
                         }
                         "new" => {
-                            chat.messages.clear();
+                            chat.start_thread();
+                            files::write_json(&path, &chat)?;
+                            Ok(json!({}))
+                        }
+                        "select-thread" => {
+                            chat.select_thread(required(&input, "thread")?)?;
                             files::write_json(&path, &chat)?;
                             Ok(json!({}))
                         }
@@ -179,6 +263,7 @@ struct Prompt {
     editing: bool,
     context: Value,
     image: Option<Attachment>,
+    widget_edit: bool,
 }
 
 impl Prompt {
@@ -223,6 +308,7 @@ impl Prompt {
             editing: input["edit"] == true,
             context: input["context"].clone(),
             image,
+            widget_edit: input["widgetEdit"] == true && input["edit"] == true,
         })
     }
 }
@@ -244,6 +330,32 @@ fn context(projects: &Projects, project: &Project, hint: &Value) -> Value {
         .as_str()
         .map(|value| value.chars().take(100).collect::<String>());
     json!({"path":path,"widgetId":widget,"type":kind,"line":hint["line"].as_u64()})
+}
+
+fn widget_edit_context(projects: &Projects, project: &Project, hint: &Value) -> Result<Value> {
+    let path = required(hint, "path")?;
+    if !path.ends_with(".dart") {
+        return Err(Problem::new(400, "Select a Dart widget."));
+    }
+    let file = projects.file(project, path)?;
+    if file.revision.as_deref() != revision(hint)? {
+        return Err(Problem::new(
+            409,
+            "The source changed. Select the widget again.",
+        ));
+    }
+    let scope = visual::Scope::for_source(projects, project, path, &file.content);
+    let outline = visual::outline_in(&file.content, &scope)?;
+    let widget = required(hint, "widget")?;
+    let selected = outline["nodes"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .find(|node| node["id"] == widget)
+        .ok_or_else(|| Problem::new(404, "Select a widget from the current source."))?;
+    Ok(
+        json!({"path":path,"widgetId":widget,"type":selected["type"],"line":selected["line"],"revision":file.revision}),
+    )
 }
 
 fn tools(editing: bool) -> Vec<Value> {
@@ -285,6 +397,7 @@ struct Workspace<'a> {
     projects: &'a Projects,
     project: &'a Project,
     pending: BTreeMap<String, PendingFile>,
+    widget_source: Option<(&'a str, &'a str)>,
 }
 
 impl Workspace<'_> {
@@ -301,7 +414,27 @@ impl Workspace<'_> {
     }
 
     fn stage(&mut self, path: &str, expected: Option<&str>, content: String) -> Result<Value> {
+        if let Some((target, _)) = self.widget_source
+            && path != target
+        {
+            return Err(Problem::new(
+                403,
+                "Prompt Edit can write to the selected widget’s Dart file.",
+            ));
+        }
         let current = self.source(path)?;
+        if let Some((_, revision)) = self.widget_source
+            && !self.pending.contains_key(path)
+            && current
+                .as_ref()
+                .and_then(|source| source.revision.as_deref())
+                != Some(revision)
+        {
+            return Err(Problem::new(
+                409,
+                "The widget’s source changed. Start Prompt Edit again.",
+            ));
+        }
         if current
             .as_ref()
             .and_then(|source| source.revision.as_deref())
@@ -534,11 +667,29 @@ fn transcript(
     rules: Value,
     prompt: &Prompt,
 ) -> Vec<Value> {
-    let info = json!({"project":project.name,"selection":selection,"mode":if prompt.editing { "edit" } else { "ask" },
+    let mode = if prompt.widget_edit {
+        "widget edit"
+    } else if prompt.editing {
+        "edit"
+    } else {
+        "ask"
+    };
+    let info = json!({"project":project.name,"selection":selection,"mode":mode,
         "projectRules":chat.rules,"projectRuleFiles":rules});
-    let mut messages =
-        vec![json!({"role":"system","content":format!("{INSTRUCTIONS}\nProject context: {info}")})];
-    for message in &chat.messages[chat.messages.len().saturating_sub(16)..] {
+    let instructions = if prompt.widget_edit {
+        "\nThis is Prompt Edit for the selected widget. Make the requested change at the selected location. Limit edits to its Dart file and keep unrelated widgets intact."
+    } else {
+        ""
+    };
+    let mut messages = vec![
+        json!({"role":"system","content":format!("{INSTRUCTIONS}{instructions}\nProject context: {info}")}),
+    ];
+    let history = if prompt.widget_edit {
+        &[]
+    } else {
+        &chat.messages[chat.messages.len().saturating_sub(16)..]
+    };
+    for message in history {
         let text: String = message.text.chars().take(12_000).collect();
         messages.push(json!({"role":message.role,"content":text}));
     }
@@ -560,9 +711,16 @@ async fn answer(
     prompt: Prompt,
 ) -> Result<Value> {
     let projects = &jobs.projects;
-    let selection = context(projects, project, &prompt.context);
+    let selection = if prompt.widget_edit {
+        widget_edit_context(projects, project, &prompt.context)?
+    } else {
+        context(projects, project, &prompt.context)
+    };
+    let widget_source = required(&selection, "path")
+        .ok()
+        .zip(required(&selection, "revision").ok());
     let rules = crate::project_rules::load(project, selection["path"].as_str())?;
-    let mut messages = transcript(chat, project, selection, rules, &prompt);
+    let mut messages = transcript(chat, project, selection.clone(), rules, &prompt);
     let tools = tools(prompt.editing);
     let client = provider::client();
     let mut workspace = Workspace {
@@ -570,6 +728,7 @@ async fn answer(
         projects,
         project,
         pending: BTreeMap::new(),
+        widget_source,
     };
     let mut progress = json!({"prompt":prompt.text,"image":prompt.image.as_ref().map(|image| &image.name),"phase":"Thinking"});
     for _ in 0..12 {
@@ -585,10 +744,44 @@ async fn answer(
                     "The AI provider returned an empty reply.",
                 ));
             }
+            if let Some((path, _)) = workspace.widget_source
+                && let Some(file) = workspace.pending.get(path)
+            {
+                let result = jobs
+                    .analyzers
+                    .saved_editor(
+                        jobs,
+                        project,
+                        &json!({"action":"diagnose","path":path,"text":file.after.content}),
+                    )
+                    .await?;
+                if let Some(error) = result["diagnostics"]
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .find(|problem| problem["severity"] == 1 && problem["message"].is_string())
+                {
+                    return Err(Problem::new(
+                        422,
+                        format!(
+                            "Dart found a problem. {}",
+                            error["message"].as_str().unwrap_or_default()
+                        ),
+                    ));
+                }
+            }
             job.check()?;
             let mut message = Message::new("user", prompt.text);
             message.image = prompt.image.map(|image| image.name);
-            return complete(projects, project, chat, workspace, message, completion.text);
+            let reply = prompt
+                .widget_edit
+                .then(|| completion.text.chars().take(1000).collect::<String>());
+            let mut result =
+                complete(projects, project, chat, workspace, message, completion.text)?;
+            if let Some(reply) = reply {
+                result["reply"] = json!(reply);
+            }
+            return Ok(result);
         }
         let calls = completion
             .calls

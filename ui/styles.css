@@ -107,6 +107,7 @@ svg { display: block; flex-shrink: 0; }
 .inspector-header > span { color: var(--subtle); }
 .agent-panel { display: flex; flex: 1; flex-direction: column; min-height: 0; }
 .agent-heading { display: flex; align-items: center; justify-content: space-between; padding: 0 9px 0 13px; min-height: 47px; border-bottom: 1px solid var(--border); }
+.agent-thread { flex: 0 0 auto; margin: 8px 11px 3px; width: calc(100% - 22px); min-width: 0; font-size: 12px; }
 .agent-messages { display: grid; align-content: start; gap: 9px; flex: 1; min-height: 0; overflow: auto; padding: 11px; font-size: 12px; }
 .agent-message { background: #252630; padding: 9px; border: 1px solid var(--border); border-radius: 7px; }
 .agent-message.user { background: #302b43; border-color: #453b5d; }
@@ -352,11 +353,18 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--accent-bg); }
 .dart-suggestion.active, .dart-suggestion:hover, .dart-problem:hover { background: #383149; }
 .dart-problems { flex: 0 1 auto; max-height: 32%; min-height: 30px; overflow: auto; background: #1d1e26; border-top: 1px solid var(--border); padding-block: 3px; }
 .dart-problems p { margin: 5px 9px; color: var(--muted); }
+.dart-problem-row { display: flex; align-items: center; gap: 6px; padding-right: 8px; }
+.dart-problem-row .dart-problem { flex: 1; min-width: 0; }
 .dart-problem { display: grid; gap: 3px; font-size: 11px; }
 .dart-problem.error small { color: var(--error); }
 .dart-problem.warning small { color: var(--warning); }
 .plan-screen-view { display: flex; flex: 1; flex-direction: column; min-height: 0; }
 .plan-screens { flex: 1; align-content: start; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(210px, 100%), 1fr)); gap: 13px; overflow: auto; padding: 16px; }
+.plan-theme-colors { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+#plan-theme-preview { padding: 18px; border: 1px solid var(--border); border-radius: 10px; background: var(--theme-surface); color: var(--theme-ink); font-family: var(--theme-body); overflow-wrap: anywhere; }
+#plan-theme-preview strong { font: 650 20px/1.3 var(--theme-heading); }
+#plan-theme-preview p { margin: 8px 0 12px; }
+#plan-theme-preview span { display: inline-block; border-radius: 6px; padding: 5px 10px; border: 2px solid var(--theme-primary); }
 .plan-screen { background: var(--panel); border: 1px solid var(--border-strong); border-radius: 9px; padding: 12px; display: grid; gap: 8px; min-width: 0; }
 .plan-screen .form-field input { width: 100%; }
 .plan-screen .inline-actions { justify-content: space-between; }

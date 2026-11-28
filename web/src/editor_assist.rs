@@ -8,6 +8,8 @@ use std::cell::RefCell;
 use wasm_bindgen::JsCast;
 use web_sys::{HtmlTextAreaElement, KeyboardEvent};
 
+pub(crate) mod actions;
+
 #[derive(Clone)]
 struct Document {
     project: String,
@@ -270,17 +272,22 @@ fn accept(index: usize) {
         };
         edits.push((start, end, string(&additional["text"]), false));
     }
+    if let Some((updated, caret)) = apply_ranges(source, edits) {
+        let _ = input().focus();
+        crate::editor::apply_edit(&updated, caret);
+    }
+}
+
+fn apply_ranges(source: &str, mut edits: Vec<(u32, u32, &str, bool)>) -> Option<(String, u32)> {
     edits.sort_by_key(|(start, end, _, _)| (*start, *end));
     if edits.windows(2).any(|pair| pair[0].1 > pair[1].0) {
-        return;
+        return None;
     }
-    let mut result = String::with_capacity(source.len() + text.len());
+    let mut result = String::with_capacity(source.len());
     let mut previous = 0;
     let mut position = 0;
     for (start, end, text, main) in edits {
-        let Some((first, last)) = byte_index(source, start).zip(byte_index(source, end)) else {
-            return;
-        };
+        let (first, last) = byte_index(source, start).zip(byte_index(source, end))?;
         result.push_str(&source[previous..first]);
         result.push_str(text);
         if main {
@@ -289,8 +296,7 @@ fn accept(index: usize) {
         previous = last;
     }
     result.push_str(&source[previous..]);
-    let _ = input().focus();
-    crate::editor::apply_edit(&result, position);
+    (result.len() <= 2 * 1024 * 1024).then_some((result, position))
 }
 
 fn render_problems(items: &[Value], caption: &str) {
@@ -313,7 +319,7 @@ fn render_problems(items: &[Value], caption: &str) {
                 _ => ("info","Info"),
             };
             let line = item["range"]["start"]["line"].as_u64().unwrap_or(0)+1;
-            format!(r#"<button type="button" class="dart-problem {class}" data-problem="{index}"><small>{label} · Line {line}</small><span>{}</span></button>"#,h(string(&item["message"])))
+            format!(r#"<div class="dart-problem-row"><button type="button" class="dart-problem {class}" data-problem="{index}"><small>{label} · Line {line}</small><span>{}</span></button><button class="button soft small" type="button" data-dart-fix="{index}" aria-label="Quick fixes for problem on line {line}">Fix</button></div>"#,h(string(&item["message"])))
         }).collect()
     };
     html("dart-problem-list", content);
@@ -384,6 +390,9 @@ pub fn key(key: &KeyboardEvent) -> bool {
     if (key.ctrl_key() || key.meta_key()) && symbol == " " {
         key.prevent_default();
         dom::spawn(assist("complete"));
+    } else if (key.ctrl_key() || key.meta_key()) && symbol == "." && Document::current().is_some() {
+        key.prevent_default();
+        dom::spawn(actions::open(None));
     } else if symbol == "F12"
         && state::read(|state| state.mode.shows_code() && state.file.ends_with(".dart"))
     {
@@ -414,6 +423,7 @@ pub fn key(key: &KeyboardEvent) -> bool {
 }
 
 pub fn initialize() {
+    dom::click("dart-actions", || dom::spawn(actions::open(None)));
     for (button, action) in [
         ("dart-complete", "complete"),
         ("dart-definition", "definition"),
@@ -440,6 +450,15 @@ pub fn initialize() {
     });
     dom::listen(&input(), "click", |_| hide_popup());
     dom::listen(&id("dart-problem-list"), "click", |event| {
+        if let Some(index) = dom::closest(&event, "[data-dart-fix]")
+            .and_then(|button| button.get_attribute("data-dart-fix"))
+            .and_then(|index| index.parse::<usize>().ok())
+            && let Some(problem) =
+                EDITOR.with_borrow(|editor| editor.diagnostics.get(index).cloned())
+        {
+            dom::spawn(actions::open(Some(problem["range"].clone())));
+            return;
+        }
         let index = dom::closest(&event, "[data-problem]")
             .and_then(|button| button.get_attribute("data-problem"))
             .and_then(|index| index.parse::<usize>().ok());

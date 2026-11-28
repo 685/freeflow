@@ -124,6 +124,24 @@ fn render(state: &State) {
         output.push_str("</article>");
     }
     html("agent-messages", output);
+    html(
+        "agent-thread",
+        items(&state.agent["threads"])
+            .iter()
+            .map(|thread| {
+                let selected = if thread["id"] == state.agent["thread"] {
+                    " selected"
+                } else {
+                    ""
+                };
+                format!(
+                    r#"<option value="{}"{selected}>{}</option>"#,
+                    h(string(&thread["id"])),
+                    h(string(&thread["title"]))
+                )
+            })
+            .collect::<String>(),
+    );
     let log = id("agent-messages");
     log.set_scroll_top(log.scroll_height());
     for control in [
@@ -133,6 +151,7 @@ fn render(state: &State) {
         "agent-attach",
         "agent-remove-image",
         "agent-settings",
+        "agent-thread",
     ] {
         disabled(control, waiting);
     }
@@ -336,6 +355,92 @@ async fn attachment(file: Option<File>) -> Result<Value> {
     Ok(json!({"name":file.name(),"mime":file.type_(),"data":data}))
 }
 
+pub(crate) async fn prompt_edit() -> Result {
+    let context = crate::property_panel::Context::capture().await?;
+    let kind = state::read(|state| {
+        state
+            .widget()
+            .map(|widget| string(&widget["type"]).to_owned())
+    })
+    .unwrap_or_default();
+    let description = format!("{kind} · {}", context.path);
+    dialogs::open(View::WidgetPromptEdit { context }, "Prompt Edit", &description,
+        r#"<form class="form">
+          <label class="form-field"><span>What should change?</span><textarea name="prompt" rows="5" maxlength="12000" placeholder="Describe the widget edit…" required autofocus></textarea></label>
+          <p id="widget-edit-progress" class="dialog-help" role="status"></p>
+          <div class="form-error" role="alert"></div>
+          <div class="form-footer"><button id="widget-edit-stop" type="button" class="button outline" data-dialog-action="stop-widget-edit" hidden>Stop</button><button type="submit" class="button primary">Apply edit</button></div>
+        </form>"#.into());
+    Ok(())
+}
+
+pub(crate) async fn submit_prompt_edit(
+    context: &crate::property_panel::Context,
+    version: u64,
+    input: Value,
+) -> Result {
+    if !context.current() || state::read(busy) {
+        return Err(Error::new(
+            "Wait for the current Agent task or select the widget again.",
+        ));
+    }
+    if drafted(&context.project) {
+        return Err(Error::new(
+            "Save the project’s code drafts before editing a widget.",
+        ));
+    }
+    let prompt = string(&input["prompt"]).trim();
+    if prompt.is_empty() {
+        return Err(Error::new("Describe the change to this widget."));
+    }
+    state::change(|state| {
+        state.agent_posting = true;
+        render(state);
+    });
+    dom::text("widget-edit-progress", "Preparing the widget edit…");
+    let project = &context.project;
+    let result =
+        async {
+            let job = project_post(project,"agent",json!({
+            "action":"send","text":prompt,"edit":true,"widgetEdit":true,
+            "context":{"path":context.path,"widget":context.widget,"revision":context.revision}
+        })).await?;
+            if dialogs::current_view(version) {
+                let stop = id("widget-edit-stop");
+                dom::attr(&stop, "data-job", string(&job["id"]));
+                stop.set_hidden(false);
+                dom::text("widget-edit-progress", "Editing and checking Dart…");
+            }
+            crate::wait_job(job).await
+        }
+        .await;
+    if dialogs::current_view(version) {
+        hidden("widget-edit-stop", true);
+        dom::text("widget-edit-progress", "");
+    }
+    state::change(|state| {
+        if state.project_id() == project {
+            state.agent_posting = false;
+            render(state);
+        }
+    });
+    let result = result?;
+    if crate::current(project) {
+        if result["checkpoint"].is_object() {
+            crate::saved_edits::refresh(project).await?;
+            update_source(project).await?;
+            toast("Widget edit saved", false);
+        } else {
+            toast(string(&result["reply"]), false);
+        }
+        if state::read(|state| state.agent_open) {
+            refresh(project).await?;
+        }
+    }
+    dialogs::close_current(version);
+    Ok(())
+}
+
 async fn send() -> Result {
     let project = crate::project_id()?;
     if state::read(busy) {
@@ -358,6 +463,7 @@ async fn send() -> Result {
         let widget = selected_widget(state).cloned().unwrap_or_default();
         json!({"path":state.current_file(),"widget":widget["id"],"type":widget["type"],"line":widget["line"]})
     });
+    let thread = state::read(|state| state.agent["thread"].clone());
     state::change(|state| {
         state.agent_posting = true;
         render(state);
@@ -368,7 +474,7 @@ async fn send() -> Result {
             &project,
             "agent",
             json!({
-                "action":"send","text":prompt,"edit":edit,"context":hint,"image":image
+                "action":"send","text":prompt,"edit":edit,"context":hint,"image":image,"thread":thread
             }),
         )
         .await?;
@@ -451,7 +557,7 @@ pub async fn poll(project: &str) -> Result {
     Ok(())
 }
 
-async fn small_action(action: &str, checkpoint: String) -> Result {
+async fn small_action(action: &str, mut input: Value) -> Result {
     let project = crate::project_id()?;
     if state::read(busy) {
         return Ok(());
@@ -466,12 +572,8 @@ async fn small_action(action: &str, checkpoint: String) -> Result {
         render(state);
     });
     let result = async {
-        let job = project_post(
-            &project,
-            "agent",
-            json!({"action":action,"checkpoint":checkpoint}),
-        )
-        .await?;
+        input["action"] = json!(action);
+        let job = project_post(&project, "agent", input).await?;
         crate::wait_job(job).await?;
         if action == "undo" {
             crate::saved_edits::refresh(&project).await?;
@@ -510,11 +612,14 @@ pub fn initialize() {
         }
     });
     dom::click("agent-new", || {
-        if dom::win()
-            .confirm_with_message("Clear this conversation? File checkpoints stay available.")
-            .unwrap_or(false)
-        {
-            dom::spawn(small_action("new", String::new()));
+        dom::spawn(small_action("new", json!({})));
+    });
+    dom::listen(&id("agent-thread"), "change", |event| {
+        if let Some(field) = dom::target(&event) {
+            dom::spawn(small_action(
+                "select-thread",
+                json!({"thread":dom::value(&field)}),
+            ));
         }
     });
     dom::click("agent-attach", || image_input().click());
@@ -548,7 +653,7 @@ pub fn initialize() {
             }
             Some("undo") => {
                 if let Some(checkpoint) = button.get_attribute("data-checkpoint") {
-                    dom::spawn(small_action("undo", checkpoint));
+                    dom::spawn(small_action("undo", json!({"checkpoint":checkpoint})));
                 }
             }
             _ => {}

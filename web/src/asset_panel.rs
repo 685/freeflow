@@ -6,7 +6,7 @@ use crate::{
     state::{self, Mode, State},
 };
 use base64::Engine as _;
-use serde_json::json;
+use serde_json::{Value, json};
 use wasm_bindgen::JsCast;
 use wasm_bindgen_futures::JsFuture;
 use web_sys::{DragEvent, File, FileList, HtmlInputElement};
@@ -95,6 +95,92 @@ fn draft_free(project: &str, path: Option<&str>) -> Result {
 
 pub async fn refresh_current() -> Result {
     refresh(&crate::project_id()?).await
+}
+
+async fn open_app_icons() -> Result {
+    let project = crate::project_id()?;
+    let config = project_get(&project, "launcher-icons").await?;
+    if !crate::current(&project) {
+        return Ok(());
+    }
+    let mut controls = String::new();
+    for (key, label, enabled) in [
+        ("android", "Android", config["android"] == true),
+        ("ios", "iOS", config["ios"] == true),
+        (
+            "foreground",
+            "Android adaptive foreground",
+            config["android"] == true,
+        ),
+    ] {
+        if !enabled {
+            continue;
+        }
+        let current = string(&config["values"][key]);
+        let choices: String = items(&config["images"])
+            .iter()
+            .map(|entry| {
+                let path = string(entry);
+                format!(
+                    r#"<option value="{}"{}>{}</option>"#,
+                    h(path),
+                    if path == current { " selected" } else { "" },
+                    h(path)
+                )
+            })
+            .collect();
+        controls.push_str(&format!(r#"<label class="form-field"><span>{label}</span><select name="{key}" aria-label="{label}"><option value="">Choose PNG image</option>{choices}</select></label>"#));
+    }
+    if config["android"] == true {
+        controls.push_str(&format!(r##"<label class="form-field"><span>Adaptive background</span><input name="background" value="{}" placeholder="#FFFFFF or assets/images/background.png" maxlength="700"></label>"##,
+            h(string(&config["values"]["background"]))));
+    }
+    let ready = !controls.is_empty() && !items(&config["images"]).is_empty();
+    let body = if ready {
+        format!(
+            r#"<form class="form">{controls}<p class="dialog-help">Adaptive icons use the foreground PNG and a solid color or a background PNG.</p><div class="form-error" role="alert"></div><div class="form-footer"><button class="button primary" type="submit">Save app icons</button></div></form>"#
+        )
+    } else if controls.is_empty() {
+        r#"<p class="dialog-help">Add Android or iOS to this Flutter project to configure launcher icons.</p>"#.into()
+    } else {
+        r#"<p class="dialog-help">Upload a square PNG in Assets to use it as an app icon.</p>"#
+            .into()
+    };
+    crate::dialogs::open(
+        crate::dialogs::View::AppIcons { project, config },
+        "App icons",
+        "Freeflow generates the selected launcher icons before native builds.",
+        body,
+    );
+    Ok(())
+}
+
+pub(crate) async fn save_app_icons(
+    project: &str,
+    version: u64,
+    config: &Value,
+    mut input: Value,
+) -> Result {
+    if !crate::current(project) {
+        return Ok(());
+    }
+    draft_free(project, Some("flutter_launcher_icons.yaml"))?;
+    input["revision"] = config["revision"].clone();
+    input["manifestRevision"] = config["manifestRevision"].clone();
+    project_post(project, "launcher-icons", input).await?;
+    if crate::current(project) {
+        crate::refresh_tree(project).await?;
+        let file = state::read(|state| state.current_file().to_owned());
+        if matches!(
+            file.as_str(),
+            "pubspec.yaml" | "flutter_launcher_icons.yaml"
+        ) {
+            crate::load_file(&file, true).await?;
+        }
+    }
+    crate::dialogs::close_current(version);
+    dom::toast("App icons saved", false);
+    Ok(())
 }
 
 pub async fn refresh(project: &str) -> Result {
@@ -336,6 +422,7 @@ pub fn initialize() {
         dom::click(button, || id("asset-input").click());
     }
     dom::click("refresh-assets", || dom::spawn(refresh_current()));
+    dom::click("app-icons", || dom::spawn(open_app_icons()));
     dom::listen(&id("asset-input"), "change", |event| {
         let Some(input) =
             dom::target(&event).and_then(|element| element.dyn_into::<HtmlInputElement>().ok())

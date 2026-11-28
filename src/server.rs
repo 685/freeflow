@@ -583,6 +583,7 @@ async fn project_route(
             "store-upload" => stores::state(projects, &project)?,
             "device" => jobs.device_session(&project.id),
             "devices" => devices::list(jobs, &project).await?,
+            "launcher-icons" => crate::launcher_icons::state(projects, &project)?,
             "jobs" => json!(jobs.list(&project.id)),
             "artifacts" => json!(jobs.artifacts(&project)?),
             "backends" => backends::state(projects, &project)?,
@@ -692,6 +693,10 @@ async fn project_route(
                 (200, result)
             }
             "preview-logs" => (200, jobs.preview_logs(&project, &input)?),
+            "launcher-icons" => (
+                200,
+                crate::launcher_icons::save(projects, &project, &input)?,
+            ),
             "edits" => (
                 200,
                 projects.replay_edit(

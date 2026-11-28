@@ -185,11 +185,7 @@ Future<void> _start(List<String> args) async {
     }
   }
 
-  selection.addListener(() {
-    final element = selection.currentElement;
-    if (!enabled || element == null) {
-      return;
-    }
+  bool sendSelection(Element element, [List<double>? menu]) {
     final locations = <Map<String, Object?>>[];
     final seen = <String>{};
     final delegate = InspectorSerializationDelegate(service: service);
@@ -207,12 +203,39 @@ Future<void> _start(List<String> args) async {
       add(ancestor);
       return locations.length < 24;
     });
+    if (locations.isEmpty) return false;
     send({
       'type': 'freeflow:selection',
       'locations': locations,
       'selected': selected,
+      if (menu != null) 'menu': menu,
     });
+    return true;
+  }
+
+  selection.addListener(() {
+    final element = selection.currentElement;
+    if (enabled && element != null) sendSelection(element);
   });
+
+  void onContextMenu(_BrowserWheel event) {
+    final view = binding.platformDispatcher.implicitView;
+    if (!enabled || view == null) return;
+    final x = event.clientX;
+    final y = event.clientY;
+    if (!x.isFinite || !y.isFinite) return;
+    final hits = HitTestResult();
+    binding.hitTestInView(hits, Offset(x, y), view.viewId);
+    for (final hit in hits.path) {
+      final target = hit.target;
+      final creator = target is RenderObject ? target.debugCreator : null;
+      if (creator is DebugCreator && sendSelection(creator.element, [x, y])) {
+        event.preventDefault();
+        event.stopPropagation();
+        break;
+      }
+    }
+  }
 
   void onMessage(_BrowserMessage event) {
     final source = event.source;
@@ -265,6 +288,11 @@ Future<void> _start(List<String> args) async {
   }
 
   _window.addEventListener('message'.toJS, onMessage.toJS);
+  _window.addEventListener(
+    'contextmenu'.toJS,
+    onContextMenu.toJS,
+    _EventOptions(passive: false, capture: true),
+  );
   void onWheel(_BrowserWheel event) {
     if ((event.ctrlKey || event.metaKey) &&
         event.deltaY.isFinite &&

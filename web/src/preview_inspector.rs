@@ -273,13 +273,29 @@ pub fn initialize() {
                     ))
                 });
                 if let Some((project, generation, request)) = context {
-                    dom::spawn(pick(
-                        project,
-                        generation,
-                        request,
-                        message["locations"].clone(),
-                        string(&message["selected"]).to_owned(),
-                    ));
+                    dom::spawn(async move {
+                        let selected = pick(
+                            project,
+                            generation,
+                            request,
+                            message["locations"].clone(),
+                            string(&message["selected"]).to_owned(),
+                        )
+                        .await?;
+                        if selected
+                            && let (Some(x), Some(y)) =
+                                (message["menu"][0].as_f64(), message["menu"][1].as_f64())
+                        {
+                            let frame = frame();
+                            let rect = frame.get_bounding_client_rect();
+                            let x = rect.left()
+                                + x * rect.width() / f64::from(frame.client_width().max(1));
+                            let y = rect.top()
+                                + y * rect.height() / f64::from(frame.client_height().max(1));
+                            crate::widget_clipboard::show(x as i32, y as i32);
+                        }
+                        Ok(())
+                    });
                 }
             }
             _ => {}
@@ -293,15 +309,15 @@ async fn pick(
     request: u64,
     locations: Value,
     rendered_id: String,
-) -> Result {
+) -> Result<bool> {
     let hit = dom::project_post(&project, "inspect", json!({"locations":locations})).await?;
     let current = |state: &State| state.generation == generation && state.pick_request == request;
     if !state::read(current) {
-        return Ok(());
+        return Ok(false);
     }
     let Some(path) = hit["path"].as_str() else {
         dom::toast("This widget has no source location in your project.", false);
-        return Ok(());
+        return Ok(false);
     };
     let widget = string(&hit["widget"]);
     let (file, mode, stale) = state::read(|state| {
@@ -315,9 +331,9 @@ async fn pick(
     if file != path || mode != next_mode || stale {
         crate::select(path.to_owned(), next_mode).await?;
     }
-    let row = state::change(|state| {
+    let (selected, row) = state::change(|state| {
         if !current(state) || state.file != path {
-            return None;
+            return (false, None);
         }
         state.widgets = true;
         state.widget.clear();
@@ -369,10 +385,10 @@ async fn pick(
             );
         }
         request_tree(state);
-        selector
+        (found, selector)
     });
     if let Some(row) = row.and_then(|selector| dom::find(&selector)) {
         row.scroll_into_view_with_bool(false);
     }
-    Ok(())
+    Ok(selected)
 }

@@ -180,8 +180,13 @@ fn repository(git: &Value) -> String {
             "Commit staged changes"
         },
         &format!(
-            r#"<input name="message" aria-label="Commit message" placeholder="Commit message" maxlength="2000" {}>"#,
-            if merging { "" } else { "required" }
+            r#"<input name="message" aria-label="Commit message" placeholder="Commit message" maxlength="2000" {}><button class="button soft small" type="button" data-dialog-action="suggest-message" title="Uses the staged changes and your configured Agent model"{}>Suggest with AI</button>"#,
+            if merging { "" } else { "required" },
+            if staged && !conflicts {
+                ""
+            } else {
+                " disabled"
+            }
         ),
         conflicts || (!merging && !staged),
     );
@@ -255,6 +260,7 @@ pub async fn submit(project: &str, version: u64, mut input: Value) -> Result {
 pub async fn act(project: &str, version: u64, action: &str, element: &Element) -> Result {
     let path = element.get_attribute("data-git-path").unwrap_or_default();
     match action {
+        "suggest-message" => suggest_message(project, version).await?,
         "clone" => clone_dialog(),
         "refresh" => {
             let git = project_get(project, "git").await?;
@@ -294,6 +300,37 @@ pub async fn act(project: &str, version: u64, action: &str, element: &Element) -
             operate(project, version, json!({"action":action,"path":path})).await?;
         }
         _ => {}
+    }
+    Ok(())
+}
+
+async fn suggest_message(project: &str, version: u64) -> Result {
+    if !current_view(version) {
+        return Ok(());
+    }
+    let controls = id("git-controls");
+    if controls.has_attribute("disabled") {
+        return Ok(());
+    }
+    let Some(field) = dom::find("#git-controls [name=message]") else {
+        return Ok(());
+    };
+    dom::attr(&controls, "disabled", "");
+    dom::text("git-feedback", "Suggesting a message from staged changes…");
+    let result = async {
+        let job = project_post(project, "git", json!({"action":"suggest-message"})).await?;
+        crate::wait_job(job).await
+    }
+    .await;
+    if current_view(version) {
+        let _ = controls.remove_attribute("disabled");
+        match result {
+            Ok(result) => {
+                dom::set_value(&field, string(&result["message"]));
+                dom::text("git-feedback", "Review the suggested message.");
+            }
+            Err(error) => dom::text("git-feedback", &error.message),
+        }
     }
     Ok(())
 }
