@@ -552,19 +552,22 @@ async fn preview_action(action: &str) -> Result {
     Ok(())
 }
 
-pub async fn new_project(data: Value, preview: bool) -> Result {
+pub async fn new_project(data: Value, preview: bool) -> Result<Option<String>> {
     if !state::read(|state| state.flutter["found"] == true) {
-        return dialogs::settings().await;
+        dialogs::settings().await?;
+        return Ok(None);
     }
     let job = ui::post("/projects/new", data).await?;
     track(&job, true);
     let result = wait_job(job).await?;
     refresh_state().await?;
-    activate(result["project"].clone()).await?;
-    if preview {
+    let project = result["project"].clone();
+    let project_id = string(&project["id"]).to_owned();
+    activate(project).await?;
+    if preview && current(&project_id) {
         preview_action("start").await?;
     }
-    Ok(())
+    Ok(Some(project_id))
 }
 
 pub async fn import_project(folder: &str) -> Result {
@@ -669,7 +672,7 @@ fn register_events() {
             )
             .await;
             ui::disabled("try-sample", false);
-            result
+            result.map(|_| ())
         })
     });
     ui::click("ai", || ui::spawn(dialogs::ai()));

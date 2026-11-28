@@ -14,8 +14,8 @@ use std::cell::RefCell;
 use wasm_bindgen::{JsCast, JsValue};
 use wasm_bindgen_futures::{JsFuture, spawn_local};
 use web_sys::{
-    Element, HtmlAnchorElement, HtmlDialogElement, HtmlElement, HtmlInputElement, KeyboardEvent,
-    MouseEvent,
+    DataTransfer, Element, HtmlAnchorElement, HtmlDialogElement, HtmlElement, HtmlInputElement,
+    KeyboardEvent, MouseEvent,
 };
 
 const MSG: &str = r#"<div class="form-error" role="alert"></div>"#;
@@ -33,6 +33,7 @@ pub(crate) enum View {
     Closed,
     Projects,
     Create,
+    CreatePrompt,
     Import,
     Git {
         project: String,
@@ -389,7 +390,48 @@ pub fn create() {
         View::Create,
         "New Flutter project",
         "Create a Flutter project on this computer.",
-        form(&content, &submit("Create project")),
+        form(
+            &content,
+            &format!(
+                "{}{}",
+                button("create-from-prompt", "Start from a prompt", "", "outline"),
+                submit("Create project")
+            ),
+        ),
+    );
+}
+
+fn create_prompt() {
+    let content = format!(
+        r#"<label class="form-field"><span>What should the app do?</span><textarea name="prompt" rows="5" maxlength="12000" autofocus></textarea></label>
+        <label class="form-field"><span>Reference image</span><input id="create-reference-image" type="file" accept="image/png,image/jpeg,image/webp,image/gif"><small>Optional with a text prompt. Images can be up to 3 MiB.</small></label>{}{}"#,
+        field(
+            "name",
+            "App name",
+            "",
+            r#"maxlength="70" placeholder="My app""#,
+            ""
+        ),
+        field(
+            "organization",
+            "Organization ID",
+            "com.example",
+            "",
+            "Used for new Android and iOS app identifiers."
+        )
+    );
+    open(
+        View::CreatePrompt,
+        "Start from a prompt",
+        "Create a Flutter project and ask the Agent to build your app.",
+        form(
+            &content,
+            &format!(
+                "{}{}",
+                button("create-back", "Back", "", "outline"),
+                submit("Generate app")
+            ),
+        ),
     );
 }
 
@@ -1169,6 +1211,41 @@ async fn submit_view(view: View, version: u64, mut input: Value) -> Result {
             new_project(input, false).await?;
             close_current(version);
         }
+        View::CreatePrompt if current_view(version) => {
+            let file = id("create-reference-image")
+                .unchecked_into::<HtmlInputElement>()
+                .files()
+                .and_then(|files| files.get(0));
+            let prompt = string(&input["prompt"]).trim();
+            if prompt.is_empty() && file.is_none() {
+                return Err(Error::new("Describe your app or choose a reference image."));
+            }
+            if prompt.len() > 24_000 || prompt.contains('\0') {
+                return Err(Error::new("Enter a prompt of up to 24,000 bytes."));
+            }
+            let reference = if let Some(file) = file {
+                crate::agent_panel::check_image(&file)?;
+                let transfer = DataTransfer::new()?;
+                transfer.items().add_with_file(&file)?;
+                transfer.files()
+            } else {
+                None
+            };
+            let name = string(&input["name"]).trim();
+            let name = if name.is_empty() { "My app" } else { name };
+            let prompt = if prompt.is_empty() {
+                "Build a Flutter app based on the attached reference image."
+            } else {
+                prompt
+            };
+            let data = json!({"name":name,"template":"blank","organization":input["organization"]});
+            if let Some(project) = new_project(data, false).await?
+                && current_view(version)
+            {
+                close_current(version);
+                crate::agent_panel::generate_project(&project, prompt, reference).await?;
+            }
+        }
         View::Import => {
             import_project(string(&input["folder"]).trim()).await?;
             close_current(version);
@@ -1349,6 +1426,8 @@ async fn act(view: View, version: u64, action: &str, element: &Element) -> Resul
             crate::theme::act(version, &config, action).await?;
         }
         View::Projects if action == "create-project" => create(),
+        View::Create if action == "create-from-prompt" => create_prompt(),
+        View::CreatePrompt if action == "create-back" => create(),
         View::Projects => {
             if let Some((kind, key)) = action.split_once('-') {
                 let project = state::read(|state| {

@@ -10,7 +10,7 @@ use base64::Engine;
 use serde_json::{Value, json};
 use wasm_bindgen::JsCast;
 use wasm_bindgen_futures::JsFuture;
-use web_sys::{File, HtmlInputElement};
+use web_sys::{File, FileList, HtmlInputElement};
 
 fn image_input() -> HtmlInputElement {
     id("agent-image").unchecked_into()
@@ -218,12 +218,33 @@ async fn open() -> Result {
 }
 
 pub async fn prepare(prompt: &str) -> Result {
+    let project = crate::project_id()?;
     open().await?;
-    if !state::read(busy) {
+    if crate::current(&project) && !state::read(busy) {
         let field = id("agent-prompt");
         dom::set_value(&field, prompt);
         dom::set_value(&id("agent-mode"), "edit");
         let _ = field.focus();
+    }
+    Ok(())
+}
+
+pub(crate) async fn generate_project(
+    project: &str,
+    prompt: &str,
+    image: Option<FileList>,
+) -> Result {
+    if !crate::current(project) {
+        return Ok(());
+    }
+    prepare(prompt).await?;
+    if !crate::current(project) || state::read(busy) {
+        return Ok(());
+    }
+    image_input().set_files(image.as_ref());
+    refresh_image();
+    if state::read(|state| state.agent["provider"]["configured"] == true) {
+        send().await?;
     }
     Ok(())
 }
@@ -342,13 +363,24 @@ pub async fn save_settings(project: &str, version: u64, input: Value) -> Result 
     Ok(())
 }
 
+pub(crate) fn check_image(file: &File) -> Result {
+    if !matches!(
+        file.type_().as_str(),
+        "image/png" | "image/jpeg" | "image/webp" | "image/gif"
+    ) {
+        return Err(Error::new("Choose a PNG, JPEG, WebP or GIF image."));
+    }
+    if file.size() == 0.0 || file.size() > f64::from(3 * 1024 * 1024) {
+        return Err(Error::new("Choose a valid image up to 3 MiB."));
+    }
+    Ok(())
+}
+
 async fn attachment(file: Option<File>) -> Result<Value> {
     let Some(file) = file else {
         return Ok(Value::Null);
     };
-    if file.size() > f64::from(3 * 1024 * 1024) {
-        return Err(Error::new("Choose an image up to 3 MiB."));
-    }
+    check_image(&file)?;
     let buffer = JsFuture::from(file.array_buffer()).await?;
     let data =
         base64::engine::general_purpose::STANDARD.encode(js_sys::Uint8Array::new(&buffer).to_vec());
